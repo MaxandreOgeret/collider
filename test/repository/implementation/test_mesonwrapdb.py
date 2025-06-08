@@ -1,0 +1,275 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 MOG Robotics OÜ.
+
+import io
+import json
+import os
+import time
+import urllib.parse
+import urllib.request
+
+import pytest
+
+from collider.Package import WrapPackage
+from collider.repository.entries import RepoPackageEntry
+from collider.repository.implementation.Wrap import (
+    _RELEASES_TTL_SECONDS,
+    Wrap,
+    _get_pkg_wrap_url,
+    _wrap_releases_to_packages,
+)
+from collider.utils.packaging.PackageType import PackageType
+from collider.utils.packaging.repo_key import make_repo_key
+
+
+class _DummyResponse:
+    def __init__(self, text: str):
+        self._fp = io.BytesIO(text.encode('utf-8'))
+
+    def __enter__(self):
+        return self._fp
+
+    def __exit__(self, exc_type, exc, tb):
+        self._fp.close()
+        return False
+
+
+def test_wrap_from_url_fetches_releases(monkeypatch):
+    releases = {
+        'foo': {'versions': ['1.0.0', '2.0.0']},
+        'bar': {'versions': ['0.1.0']},
+    }
+    payload = json.dumps(releases)
+    called = {}
+
+    def _fake_urlopen(url, **_kwargs):
+        called['url'] = url
+        return _DummyResponse(payload)
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/')
+    assert isinstance(repo, Wrap)
+
+    expected_url = urllib.parse.urljoin('https://wrapdb.mesonbuild.com/v2/', 'releases.json')
+    assert called['url'] == expected_url
+
+    keys = repo.packages.keys()
+    assert make_repo_key('foo', '1.0.0', PackageType.WRAP) in keys
+    assert make_repo_key('foo', '2.0.0', PackageType.WRAP) in keys
+    assert make_repo_key('bar', '0.1.0', PackageType.WRAP) in keys
+
+
+def test_wrap_from_url_warns_missing_v2(monkeypatch, caplog):
+    releases = {'foo': {'versions': ['1.0.0']}}
+    payload = json.dumps(releases)
+    called = {}
+
+    def _fake_urlopen(url, **_kwargs):
+        called['url'] = url
+        return _DummyResponse(payload)
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    caplog.set_level('WARNING')
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com')
+
+    assert 'missing "/v2/"' in caplog.text
+    assert called['url'] == 'https://wrapdb.mesonbuild.com/v2/releases.json'
+    assert repo.url.geturl() == 'https://wrapdb.mesonbuild.com/v2/'
+
+
+def test_wrap_from_url_warns_http(monkeypatch, caplog):
+    releases = {'foo': {'versions': ['1.0.0']}}
+    payload = json.dumps(releases)
+
+    def _fake_urlopen(url, **_kwargs):
+        return _DummyResponse(payload)
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    caplog.set_level('WARNING')
+    repo = Wrap.from_url('http://wrapdb.mesonbuild.com/v2/')
+
+    assert isinstance(repo, Wrap)
+    assert 'HTTP WrapDB URLs are allowed but insecure' in caplog.text
+
+
+def test_wrap_releases_to_packages_multiple_versions():
+    releases = {
+        'foo': {'versions': ['1.0.0', '2.0.0']},
+        'bar': {'versions': ['0.1.0']},
+    }
+    packages = _wrap_releases_to_packages(releases)
+    assert len(packages) == 3
+
+    key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
+    entry = packages[key]
+    assert entry.name == 'foo'
+    assert entry.version == '1.0.0'
+    assert entry.package_type == PackageType.WRAP
+
+
+def test_wrap_releases_to_packages_empty_versions():
+    releases = {
+        'foo': {'versions': []},
+    }
+    packages = _wrap_releases_to_packages(releases)
+    assert packages == {}
+
+
+def test_wrap_url_builders():
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    entry = RepoPackageEntry('foo', '1.2.3', PackageType.WRAP)
+
+    assert _get_pkg_wrap_url(url, entry) == 'https://wrapdb.mesonbuild.com/v2/foo_1.2.3/foo.wrap'
+
+
+def test_wrap_add_remove_not_supported():
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    repo = Wrap(url, {})
+
+    with pytest.raises(NotImplementedError, match='does not support adding'):
+        repo.add_package(
+            WrapPackage.from_wrap_text(
+                'foo',
+                '1.0.0',
+                '[wrap-file]\nsource_url=x\nsource_filename=y\nsource_hash=z\n',
+            )
+        )
+
+    repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
+    repo.packages[repo_key] = RepoPackageEntry('foo', '1.0.0', PackageType.WRAP)
+
+    with pytest.raises(NotImplementedError, match='does not support removing'):
+        repo.remove_package(
+            WrapPackage.from_wrap_text(
+                'foo',
+                '1.0.0',
+                '[wrap-file]\nsource_url=x\nsource_filename=y\nsource_hash=z\n',
+            )
+        )
+
+
+def test_wrap_get_package_parses_wrap(monkeypatch):
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+        'patch_url=https://wrapdb.mesonbuild.com/v2/foo_1.0.0/get_patch\n'
+        'patch_filename=foo-1.0.0-1.patch\n'
+        'patch_hash=beefdead\n'
+    )
+
+    def _fake_urlopen(url, **_kwargs):
+        return _DummyResponse(wrap_text)
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
+    packages = {repo_key: RepoPackageEntry('foo', '1.0.0', PackageType.WRAP)}
+    repo = Wrap(url, packages)
+
+    pkg = repo.get_package(repo_key)
+    assert isinstance(pkg, WrapPackage)
+    assert pkg.name == 'foo'
+    assert pkg.version == '1.0.0'
+    assert pkg.source_url == 'https://example.com/foo.tar.xz'
+    assert pkg.source_filename == 'foo.tar.xz'
+    assert pkg.source_hash == 'deadbeef'
+
+
+def test_wrap_from_url_offline_uses_cache(tmp_path):
+    cache_path = tmp_path / 'cache'
+    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps({'foo': {'versions': ['1.0.0']}}), encoding='utf-8')
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
+    repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
+    assert repo_key in repo.packages
+
+
+def test_wrap_from_url_offline_requires_cache(tmp_path):
+    with pytest.raises(ValueError, match='Offline mode requires cached wrap releases'):
+        Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=tmp_path, offline=True)
+
+
+def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
+    """Cached releases.json within TTL skips the HTTP fetch entirely."""
+    cache_path = tmp_path / 'cache'
+    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps({'foo': {'versions': ['1.0.0']}}), encoding='utf-8')
+
+    http_called = False
+
+    def _fake_urlopen(url, **_kwargs):
+        nonlocal http_called
+        http_called = True
+        return _DummyResponse(json.dumps({'bar': {'versions': ['2.0.0']}}))
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+    assert not http_called
+    assert make_repo_key('foo', '1.0.0', PackageType.WRAP) in repo.packages
+
+
+def test_wrap_from_url_fetches_when_ttl_expired(tmp_path, monkeypatch):
+    """Stale cached releases.json (past TTL) triggers a fresh HTTP fetch."""
+    cache_path = tmp_path / 'cache'
+    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps({'old': {'versions': ['0.1.0']}}), encoding='utf-8')
+
+    stale_mtime = time.time() - _RELEASES_TTL_SECONDS - 10
+    os.utime(cache_file, (stale_mtime, stale_mtime))
+
+    def _fake_urlopen(url, **_kwargs):
+        return _DummyResponse(json.dumps({'fresh': {'versions': ['3.0.0']}}))
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+    assert make_repo_key('fresh', '3.0.0', PackageType.WRAP) in repo.packages
+    assert make_repo_key('old', '0.1.0', PackageType.WRAP) not in repo.packages
+
+
+def test_wrap_from_url_fetches_when_no_cache(tmp_path, monkeypatch):
+    """Without a cached file, HTTP fetch always happens."""
+    cache_path = tmp_path / 'empty_cache'
+
+    def _fake_urlopen(url, **_kwargs):
+        return _DummyResponse(json.dumps({'new': {'versions': ['1.0.0']}}))
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+    assert make_repo_key('new', '1.0.0', PackageType.WRAP) in repo.packages
+
+
+def test_wrap_from_url_ttl_not_checked_in_offline_mode(tmp_path, monkeypatch):
+    """Offline mode always uses cache regardless of age -- no TTL check."""
+    cache_path = tmp_path / 'cache'
+    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps({'stale': {'versions': ['0.1.0']}}), encoding='utf-8')
+
+    stale_mtime = time.time() - _RELEASES_TTL_SECONDS - 3600
+    os.utime(cache_file, (stale_mtime, stale_mtime))
+
+    http_called = False
+
+    def _fake_urlopen(url, **_kwargs):
+        nonlocal http_called
+        http_called = True
+        return _DummyResponse(json.dumps({}))
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
+    assert not http_called
+    assert make_repo_key('stale', '0.1.0', PackageType.WRAP) in repo.packages

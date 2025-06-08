@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "url"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "filesystem",
+              "wrap",
+              "collider"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "publish_url": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "filesystem"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "publish_url"
+              ]
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "repositories"
+  ],
+  "additionalProperties": false
+}

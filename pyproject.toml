@@ -1,0 +1,141 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 MOG Robotics OÜ
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "collider-wraps"
+version = "1.0.0"
+description = "A package and dependency manager for Meson projects."
+readme = "README.md"
+authors = [
+    { name = "Maxandre Ogeret", email = "maxandre.ogeret@mogrobotics.com" }
+]
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "jsonschema>=4.25.1",
+    "meson>=1.8.5",
+    "ninja>=1.13.0",
+    "packaging>=25.0",
+    "resolvelib>=1.2.1",
+    "tqdm>=4.66",
+]
+
+[project.urls]
+Homepage = "https://github.com/MaxandreOgeret/collider"
+
+[project.scripts]
+collider = "collider.entrypoint:entrypoint"
+
+# ------- Setuptools ------------------------------------------------------------
+[tool.setuptools.packages.find]
+include = ["collider*"]
+exclude = ["subprojects*"]
+
+# ------- Pytest -----------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+log_cli = true
+log_cli_level = "DEBUG"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=collider",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=80"
+]
+
+# ------- Coverage.py ------------------------------------------------------------
+[tool.coverage.run]
+source = ["collider"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == '__main__':",
+    "@abstractmethod"
+]
+
+# ------- Pylint -----------------------------------------------------------------
+[tool.pylint.main]
+jobs = 0
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    "broad-exception-caught",
+    "consider-using-with",
+    "duplicate-code",
+    "fixme",
+    "invalid-name",
+    "line-too-long",
+    "logging-fstring-interpolation",
+    "missing-module-docstring",
+    "redefined-builtin",
+    "too-many-arguments",
+    "too-many-branches",
+    "too-many-locals",
+    "too-many-positional-arguments",
+    "too-many-return-statements"
+]
+
+# ------- Ruff -------------------------------------------------------------------
+[tool.ruff]
+lint.select = ["I"]
+line-length = 100
+indent-width = 4
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist"
+]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+force-single-line = false
+lines-between-types = 1
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]   # Allow unused imports for package convenience.
+"conftest.py" = ["F401", "F403"]   # Fixtures are often imported but unused.
+
+[tool.uv]
+default-groups = ["dev", "docs"]
+
+[dependency-groups]
+dev = [
+    "ninja>=1.13.0",
+    "pylint>=3.3.8",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "ruff>=0.12.8",
+    "ty>=0.0.1a35",
+]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.6",
+]

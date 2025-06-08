@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "version",
+    "dependencies",
+    "packages"
+  ],
+  "definitions": {
+    "locked_entry": {
+      "type": "object",
+      "required": [
+        "version",
+        "wrap_hash"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wrap_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/locked_entry"
+      }
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/locked_entry"
+      }
+    }
+  },
+  "additionalProperties": false
+}

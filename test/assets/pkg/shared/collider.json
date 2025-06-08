@@ -1,0 +1,9 @@
+{
+  "description": "Test for shared library project",
+  "dependencies": [
+    {
+      "name": "libmd",
+      "source": "system"
+    }
+  ]
+}

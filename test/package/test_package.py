@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 MOG Robotics OÜ.
+
+from pathlib import Path
+
+import pytest
+
+from collider.Package import WrapPackage
+
+
+def test_wrap_package_install_writes_wrap_file(tmp_path: Path):
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+
+    pkg = WrapPackage(
+        name='foo',
+        version='1.0.0',
+        wrap_text='[wrap-file]\nsource_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\nsource_hash=deadbeef\n',
+        source_url='https://example.com/foo.tar.xz',
+        source_filename='foo.tar.xz',
+        source_hash='deadbeef',
+    )
+
+    subproject_path = subprojects / 'foo'
+    pkg.install_to_subproject(subproject_path)
+
+    wrap_path = subprojects / 'foo.wrap'
+    assert wrap_path.exists()
+    assert wrap_path.read_text(encoding='utf-8') == pkg.wrap_text
+    assert not subproject_path.exists()
+
+
+def test_wrap_package_install_errors_on_existing_paths(tmp_path: Path):
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+
+    pkg = WrapPackage(
+        name='foo',
+        version='1.0.0',
+        wrap_text='[wrap-file]\nsource_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\nsource_hash=deadbeef\n',
+        source_url='https://example.com/foo.tar.xz',
+        source_filename='foo.tar.xz',
+        source_hash='deadbeef',
+    )
+
+    subproject_path = subprojects / 'foo'
+    subproject_path.mkdir()
+
+    with pytest.raises(FileExistsError):
+        pkg.install_to_subproject(subproject_path)
+
+
+def test_wrap_package_install_is_idempotent_with_existing_wrap(tmp_path: Path):
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+
+    wrap_text = (
+        '[wrap-file]\nsource_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\nsource_hash=deadbeef\n'
+    )
+    pkg = WrapPackage(
+        name='foo',
+        version='1.0.0',
+        wrap_text=wrap_text,
+        source_url='https://example.com/foo.tar.xz',
+        source_filename='foo.tar.xz',
+        source_hash='deadbeef',
+    )
+
+    wrap_path = subprojects / 'foo.wrap'
+    wrap_path.write_text(wrap_text, encoding='utf-8')
+
+    pkg.install_to_subproject(subprojects / 'foo')
+    assert wrap_path.read_text(encoding='utf-8') == wrap_text
+
+
+def test_wrap_package_rejects_incomplete_patch_metadata():
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+        'patch_url=https://example.com/foo.patch\n'
+    )
+
+    with pytest.raises(ValueError, match='patch metadata is incomplete'):
+        WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
+
+
+def test_wrap_package_warns_http_urls(caplog):
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=http://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+    )
+
+    caplog.set_level('WARNING')
+    pkg = WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
+    assert pkg.source_url == 'http://example.com/foo.tar.xz'
+    assert 'HTTP source URLs are allowed but insecure' in caplog.text
