@@ -1,0 +1,30 @@
+{#-
+  This file was manually customized for Collider.
+-#}
+{% set github_repo = config.extra.github_repo | d(config.repo_name, true) %}
+<a
+  href="{{ config.repo_url }}"
+  title="{{ lang.t('source') }}"
+  class="md-source"
+  data-md-component="source"
+  data-gh-repo="{{ github_repo }}"
+>
+  <div class="md-source__icon md-icon">
+    {% set icon = config.theme.icon.repo or "fontawesome/brands/git-alt" %}
+    {% include ".icons/" ~ icon ~ ".svg" %}
+  </div>
+  <div class="md-source__repository md-source__repository--active">
+    <span class="md-source__repo-name">{{ config.repo_name }}</span>
+    <ul class="md-source__facts" aria-label="Repository metadata">
+      {% if config.extra.version %}
+        <li class="md-source__fact md-source__fact--version">{{ config.extra.version }}</li>
+      {% endif %}
+      <li class="md-source__fact md-source__fact--stars">
+        <span data-gh-stat="stars">stars</span>
+      </li>
+      <li class="md-source__fact md-source__fact--forks">
+        <span data-gh-stat="forks">forks</span>
+      </li>
+    </ul>
+  </div>
+</a>
