@@ -13,14 +13,11 @@
       {% include "partials/logo.html" %}
     </a>
     <label class="md-header__button md-icon" for="__drawer">
-      {% set icon = config.theme.icon.menu or "material/menu" %}
+      {% set icon = config.theme.icon.menu or "lucide/menu" %}
       {% include ".icons/" ~ icon ~ ".svg" %}
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
-        <div class="md-header__topic">
-          <span class="md-version">v{{ config.extra.version }}</span>
-        </div>
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             {% if page.meta and page.meta.title %}
@@ -43,15 +40,17 @@
     {% if config.extra.alternate %}
       {% include "partials/alternate.html" %}
     {% endif %}
-    {% if "material/search" in config.plugins %}
-      {% set search = config.plugins["material/search"] | attr("config") %}
-      {% if search.enabled %}
-        <label class="md-header__button md-icon" for="__search">
-          {% set icon = config.theme.icon.search or "material/magnify" %}
-          {% include ".icons/" ~ icon ~ ".svg" %}
-        </label>
-        {% include "partials/search.html" %}
-      {% endif %}
+    {% if "search" in config.plugins %}
+      {% set search = config.plugins["search"] | attr("config") %}
+    {% else %}
+      {% set search = none %}
+    {% endif %}
+    {% if search and search.enabled %}
+      <label class="md-header__button md-icon" for="__search">
+        {% set icon = config.theme.icon.search or "lucide/search" %}
+        {% include ".icons/" ~ icon ~ ".svg" %}
+      </label>
+      {% include "partials/search.html" %}
     {% endif %}
     {% if config.repo_url %}
       <div class="md-header__source">

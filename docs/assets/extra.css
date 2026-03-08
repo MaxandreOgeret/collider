@@ -15,7 +15,30 @@
   --md-accent-fg-color--transparent: rgba(177, 133, 167, 0.1);
 }
 
-.md-version {
+.footer-meta {
   font-size: 0.7rem;
-  opacity: 0.7;
+  line-height: 1.3;
+}
+
+.md-header__source {
+  width: 12.8rem;
+  max-width: 12.8rem;
+}
+
+.md-source__repo-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.md-source__fact {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-header__source {
+    width: 13.6rem;
+    max-width: 13.6rem;
+  }
 }

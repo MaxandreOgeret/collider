@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 MOG Robotics OÜ
+
+[project]
+site_name = "Collider"
+site_description = "A package and dependency manager for Meson projects."
+site_url = "https://maxandreogeret.github.io/collider/"
+site_author = "Maxandre Ogeret"
+repo_url = "https://github.com/MaxandreOgeret/collider"
+repo_name = "MaxandreOgeret/collider"
+copyright = """
+Copyright &copy; 2026 <a href="https://mogrobotics.com/legal/">MOG Robotics OÜ</a>
+"""
+extra_css = ["assets/extra.css"]
+extra_javascript = ["assets/source-stats.js"]
+
+[project.extra]
+version = "1.0.0"
+github_repo = "MaxandreOgeret/collider"
+
+nav = [
+  { Home = "index.md" },
+  { "Getting Started" = [
+    { Installation = "getting-started/installation.md" },
+    { "Quick Start" = "getting-started/quickstart.md" },
+  ] },
+  { "User Guide" = [
+    { "Project Setup" = "guide/project-setup.md" },
+    { "Managing Packages" = "guide/managing-packages.md" },
+    { Repositories = "guide/repositories.md" },
+    { Publishing = "guide/publishing.md" },
+    { "Locking and Installing" = "guide/locking-and-installing.md" },
+    { "Offline Mode" = "guide/offline-mode.md" },
+    { "Serving Repositories" = "guide/serving.md" },
+  ] },
+  { Reference = [
+    { CLI = "reference/cli.md" },
+    { "Configuration Files" = "reference/configuration.md" },
+    { "Wrap API" = "reference/wrap-api.md" },
+    { Glossary = "reference/glossary.md" },
+  ] },
+  { Development = [
+    { Design = "development/design.md" },
+  ] },
+]
+
+markdown_extensions = [
+  "admonition",
+  "pymdownx.details",
+  "pymdownx.superfences",
+  { "pymdownx.highlight" = { anchor_linenums = true } },
+  "pymdownx.inlinehilite",
+  { "pymdownx.tabbed" = { alternate_style = true } },
+  "tables",
+  { toc = { permalink = true } },
+  "attr_list",
+]
+
+[project.theme]
+variant = "classic"
+custom_dir = "overrides"
+logo = "assets/logo-white.svg"
+favicon = "assets/logo.svg"
+features = [
+  "navigation.sections",
+  "navigation.expand",
+  "navigation.top",
+  "content.code.copy",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
