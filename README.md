@@ -1,5 +1,5 @@
 <p align="center">
-<img src="docs/assets/logo.svg" width="300">
+<img src="https://collider.ee/assets/logo.svg" width="300">
 </p>
 
 A package and dependency manager for Meson projects, centered on Meson's wrap system.
