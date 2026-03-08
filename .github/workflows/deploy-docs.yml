@@ -1,0 +1,60 @@
+name: deploy-docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-docs-web-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: web-deploy
+    permissions:
+      contents: read
+    env:
+      DOCS_DEPLOY_HOST: ${{ vars.DOCS_DEPLOY_HOST }}
+      DOCS_DEPLOY_USER: ${{ vars.DOCS_DEPLOY_USER }}
+      DOCS_DEPLOY_PORT: ${{ vars.DOCS_DEPLOY_PORT || '22' }}
+      DOCS_DEPLOY_REPO_DIR: ${{ vars.DOCS_DEPLOY_REPO_DIR || '/collider-app' }}
+      DOCS_DEPLOY_WEB_ROOT: ${{ vars.DOCS_DEPLOY_WEB_ROOT || '/var/www/collider' }}
+      DOCS_DEPLOY_BRANCH: ${{ vars.DOCS_DEPLOY_BRANCH || 'main' }}
+      DOCS_DEPLOY_WEB_GROUP: ${{ vars.DOCS_DEPLOY_WEB_GROUP || 'caddy' }}
+      DOCS_DEPLOY_KNOWN_HOSTS: ${{ vars.DOCS_DEPLOY_KNOWN_HOSTS }}
+    steps:
+      - name: Validate deploy configuration
+        run: |
+          test -n "$DOCS_DEPLOY_HOST"
+          test -n "$DOCS_DEPLOY_USER"
+          test -n "$DOCS_DEPLOY_REPO_DIR"
+          test -n "$DOCS_DEPLOY_WEB_ROOT"
+          test -n "$DOCS_DEPLOY_KNOWN_HOSTS"
+
+      - name: Load deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DOCS_DEPLOY_SSH_KEY }}
+
+      - name: Add pinned server host key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DOCS_DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy docs on server
+        run: |
+          cat .ci/deploy-docs.sh | ssh -p "$DOCS_DEPLOY_PORT" "$DOCS_DEPLOY_USER@$DOCS_DEPLOY_HOST" \
+            "sudo -n -u collider env \
+             REPO_DIR='$DOCS_DEPLOY_REPO_DIR' \
+             DEPLOY_BRANCH='$DOCS_DEPLOY_BRANCH' \
+             WEB_ROOT='$DOCS_DEPLOY_WEB_ROOT' \
+             WEB_GROUP='$DOCS_DEPLOY_WEB_GROUP' \
+             bash -s"
+
+      - name: Restart collider repo service
+        run: |
+          ssh -p "$DOCS_DEPLOY_PORT" "$DOCS_DEPLOY_USER@$DOCS_DEPLOY_HOST" \
+            "sudo -n systemctl restart collider_repo.service"
