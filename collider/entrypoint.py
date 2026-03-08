@@ -21,10 +21,30 @@ from collider.log import Level, configure_logging, logger
 from collider.utils import core
 
 
+_DIST_NAME = 'collider-wraps'
+
+
 class _RawDescriptionArgumentDefaultsHelpFormatter(
     argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter
 ):
     """Argument parser formatter that supports raw descriptions with defaults."""
+
+
+def _get_installed_version() -> str:
+    """Resolve the published distribution version, not the import package name."""
+    try:
+        return importlib.metadata.version(_DIST_NAME)
+    except PackageNotFoundError:
+        return '0.0.0'
+
+
+def _get_project_url() -> str:
+    """Read project metadata from the installed distribution when available."""
+    try:
+        metadata = importlib.metadata.metadata(_DIST_NAME)
+        return str(metadata.get('Project-URL')).split(', ')[1]  # ty:ignore[unresolved-attribute]
+    except (PackageNotFoundError, AttributeError, ValueError, IndexError):
+        return 'https://github.com/MaxandreOgeret/collider'
 
 
 def error_handler(e: Exception) -> None:
@@ -32,12 +52,7 @@ def error_handler(e: Exception) -> None:
     Handle unhandled exceptions with user-friendly error reporting and bug reporting instructions.
     :param e: Exception to report.
     """
-
-    try:
-        metadata = importlib.metadata.metadata(collider.__name__)
-        project_url = str(metadata.get('Project-URL')).split(', ')[1]  # ty:ignore[unresolved-attribute]
-    except (PackageNotFoundError, AttributeError, ValueError, IndexError):
-        project_url = 'https://github.com/MaxandreOgeret/collider'
+    project_url = _get_project_url()
     logger.critical(
         'Oi oi oi päkapikk! '
         'Collider encountered an unhandled error, this is probably a bug within collider.'
@@ -113,10 +128,7 @@ def main() -> int:
 
     # Create context.
     configure_logging(app_args.verbose)
-    try:
-        version = importlib.metadata.version(collider.__name__)
-    except PackageNotFoundError:
-        version = '0.0.0'
+    version = _get_installed_version()
 
     logger.info(f'{collider.__name__.capitalize()} {version} - {parser.description}')
     context = config.load(offline=app_args.offline)

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from collider.entrypoint import entrypoint, error_handler
+from collider.entrypoint import _get_installed_version, entrypoint, error_handler
 from collider.log import Level, logger
 
 
@@ -136,6 +136,14 @@ def test_error_handler_verbose(caplog) -> None:
         assert 'Verbose Error' in caplog.text
     finally:
         logger.setLevel(original_level)
+
+
+def test_get_installed_version_uses_distribution_name() -> None:
+    """Version lookup should use the published distribution name."""
+    with patch('importlib.metadata.version', return_value='1.0.0') as mock_version:
+        assert _get_installed_version() == '1.0.0'
+
+    mock_version.assert_called_once_with('collider-wraps')
 
 
 def test_entrypoint_unhandled_exception_exits_nonzero() -> None:

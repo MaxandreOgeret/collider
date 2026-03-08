@@ -36,6 +36,9 @@ collider = "collider.entrypoint:entrypoint"
 include = ["collider*"]
 exclude = ["subprojects*"]
 
+[tool.setuptools.package-data]
+collider = ["file_model/schema/*.json"]
+
 # ------- Pytest -----------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["test"]
