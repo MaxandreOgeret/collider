@@ -9,6 +9,9 @@ jobs:
   pytest:
     name: pytest (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write   # required for publish-unit-test-result-action to create check runs
     strategy:
       fail-fast: false
       matrix:
@@ -24,7 +27,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
       - name: Pytest
-        run: uv run pytest --cov=collider --cov-branch --cov-report=xml
+        run: uv run pytest --cov=collider --cov-branch --cov-report=xml --junitxml=test-results/junit.xml
+      - name: Publish test results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: test-results/**/*.xml
+          comment_mode: off   # avoid needing pull-requests: write; check run + job summary only
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
