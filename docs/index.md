@@ -7,6 +7,15 @@ hide:
 <img src="assets/logo.svg" width="300" alt="Collider logo">
 </p>
 
+<p align="center">
+  <a href="https://github.com/MaxandreOgeret/collider/actions/workflows/tests.yml"><img src="https://github.com/MaxandreOgeret/collider/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/MaxandreOgeret/collider/actions/workflows/lint.yml"><img src="https://github.com/MaxandreOgeret/collider/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
+  <a href="https://pypi.org/project/collider-wraps/"><img src="https://img.shields.io/pypi/v/collider-wraps?label=PyPI" alt="PyPI"></a>
+  <a href="https://github.com/MaxandreOgeret/collider/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
+  <a href="https://codecov.io/gh/MaxandreOgeret/collider"><img src="https://codecov.io/gh/MaxandreOgeret/collider/graph/badge.svg" alt="codecov"></a>
+  <a href="https://matrix.to/#/#collider:matrix.org"><img src="https://img.shields.io/badge/Join%20chat-%23collider%3Amatrix.org-000000?logo=matrix" alt="Matrix"></a>
+</p>
+
 <p align="center"><strong>A package and dependency manager for Meson projects, centered on Meson's wrap system.</strong></p>
 
 Collider streamlines how you publish, share, and consume Meson wrap packages.
