@@ -24,8 +24,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
       - name: Pytest
-        run: uv run pytest --cov=collider --cov-branch --cov-report=xml
+        run: uv run pytest --cov=collider --cov-branch --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
       - name: Upload coverage reports to Codecov
+        if: matrix.python-version == '3.13'
         uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov
+        if: matrix.python-version == '3.13' && !cancelled()
+        uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
