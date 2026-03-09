@@ -39,6 +39,7 @@ nav = [
   { Development = [
     { Design = "development/design.md" },
   ] },
+  { bBlog = ["blog/index.md"] },
 ]
 
 markdown_extensions = [
@@ -60,6 +61,7 @@ logo = "assets/logo-white.svg"
 favicon = "assets/logo.svg"
 features = [
   "navigation.sections",
+  "navigation.indexes",
   "navigation.expand",
   "navigation.top",
   "content.code.copy",
