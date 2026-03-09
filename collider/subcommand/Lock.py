@@ -27,6 +27,7 @@ from collider.utils.packaging.resolver import (
     build_dep_name_index,
     resolve_all_dependencies,
 )
+from collider.utils.url import normalize_url
 
 
 class Lock(InstallSubcommand):
@@ -43,7 +44,9 @@ class Lock(InstallSubcommand):
         del cls
         return (
             'Resolve dependencies declared in collider.json and write collider.lock.\n'
-            'This is the only command that creates or updates the lockfile.'
+            'This is the only command that creates or updates the lockfile.\n'
+            'Origin URLs are normalized (lowercased scheme/host, trailing slash stripped) '
+            'when writing the lockfile.'
         )
 
     @staticmethod
@@ -138,7 +141,15 @@ class Lock(InstallSubcommand):
                 if package is None:
                     return os.EX_IOERR
 
-                locked = LockedPackage.from_wrap_text(candidate.version, package.wrap_text)
+                try:
+                    self.context.cache.verify_archives(package, offline=self.offline)
+                except (ValueError, FileNotFoundError) as e:
+                    logger.critical(f'Archive verification failed for "{pkg_name}": {e}')
+                    return os.EX_DATAERR
+
+                locked = LockedPackage.from_wrap_text(
+                    candidate.version, package.wrap_text, normalize_url(repo.origin_url)
+                )
                 if pkg_name in direct_names:
                     lockfile.dependencies[pkg_name] = locked
                 else:
@@ -159,8 +170,14 @@ class Lock(InstallSubcommand):
                 if package is None:
                     return os.EX_IOERR
 
+                try:
+                    self.context.cache.verify_archives(package, offline=self.offline)
+                except (ValueError, FileNotFoundError) as e:
+                    logger.critical(f'Archive verification failed for "{entry.name}": {e}')
+                    return os.EX_DATAERR
+
                 lockfile.dependencies[entry.name] = LockedPackage.from_wrap_text(
-                    entry.version, package.wrap_text
+                    entry.version, package.wrap_text, normalize_url(repo.origin_url)
                 )
 
         lockfile.save()

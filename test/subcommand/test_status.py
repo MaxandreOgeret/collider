@@ -18,6 +18,9 @@ from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.resolver import Candidate, ResolutionResult, ResolutionSummary
 
 
+ORIGIN = 'https://wrapdb.example.com/v2/'
+
+
 def _init_project(tmp_path: Path, dependencies: list[Dependency]) -> None:
     (tmp_path / 'meson.build').write_text('project("dummy", "c")\n')
     Colliderfile(dependencies=dependencies).save(tmp_path / Colliderfile.get_filename())
@@ -81,7 +84,7 @@ def test_status_reports_lock_drift_ok(tmp_path: Path, caplog) -> None:
     _init_project(tmp_path, dependencies)
 
     lockfile = Lockfile(
-        dependencies={'alpha': LockedPackage(version='1.0', wrap_hash=wrap_hash)},
+        dependencies={'alpha': LockedPackage(version='1.0', wrap_hash=wrap_hash, origin=ORIGIN)},
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
 
@@ -111,7 +114,7 @@ def test_status_reports_lock_drift_modified(tmp_path: Path, caplog) -> None:
 
     lockfile = Lockfile(
         dependencies={
-            'alpha': LockedPackage(version='1.0', wrap_hash='sha256:' + 'a' * 64),
+            'alpha': LockedPackage(version='1.0', wrap_hash='sha256:' + 'a' * 64, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -141,7 +144,7 @@ def test_status_reports_lock_drift_missing(tmp_path: Path, caplog) -> None:
 
     lockfile = Lockfile(
         dependencies={
-            'alpha': LockedPackage(version='1.0', wrap_hash='sha256:' + 'a' * 64),
+            'alpha': LockedPackage(version='1.0', wrap_hash='sha256:' + 'a' * 64, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -169,11 +172,13 @@ def test_status_shows_transitive_from_lockfile(tmp_path: Path, caplog) -> None:
 
     lockfile = Lockfile(
         dependencies={
-            'grpc': LockedPackage(version='1.59.1', wrap_hash='sha256:' + 'a' * 64),
+            'grpc': LockedPackage(version='1.59.1', wrap_hash='sha256:' + 'a' * 64, origin=ORIGIN),
         },
         packages={
-            'abseil-cpp': LockedPackage(version='20240722.0', wrap_hash='sha256:' + 'b' * 64),
-            'zlib': LockedPackage(version='1.3.1', wrap_hash='sha256:' + 'c' * 64),
+            'abseil-cpp': LockedPackage(
+                version='20240722.0', wrap_hash='sha256:' + 'b' * 64, origin=ORIGIN
+            ),
+            'zlib': LockedPackage(version='1.3.1', wrap_hash='sha256:' + 'c' * 64, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())

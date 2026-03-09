@@ -24,6 +24,12 @@ class RepositoryInterface(ABC):
 
     def __init__(self, packages: dict[RepoKey, RepoPackageEntry]) -> None:
         self.packages = packages
+        self._origin_url: str = ''
+
+    @property
+    def origin_url(self) -> str:
+        """The URL this repository was constructed from."""
+        return self._origin_url
 
     # Repo operations.
 
@@ -38,7 +44,9 @@ class RepositoryInterface(ABC):
         if not parsed_url.scheme:
             raise ValueError(f'Invalid URL: {url_str}')
 
-        return cls._from_url_impl(parsed_url, **kwargs)
+        instance = cls._from_url_impl(parsed_url, **kwargs)
+        instance._origin_url = url_str  # pylint: disable=protected-access
+        return instance
 
     @classmethod
     @abstractmethod

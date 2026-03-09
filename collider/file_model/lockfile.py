@@ -17,15 +17,17 @@ class LockedPackage:
 
     version: str
     wrap_hash: str
+    origin: str
 
     @classmethod
-    def from_wrap_text(cls, version: str, wrap_text: str) -> 'LockedPackage':
+    def from_wrap_text(cls, version: str, wrap_text: str, origin: str) -> 'LockedPackage':
         """
         Build a locked entry by hashing wrap file text.
         :param version: Resolved package version.
         :param wrap_text: Raw text content of the .wrap file.
+        :param origin: Repository URL the package was resolved from.
         """
-        return cls(version=version, wrap_hash=compute_wrap_hash(wrap_text))
+        return cls(version=version, wrap_hash=compute_wrap_hash(wrap_text), origin=origin)
 
 
 def compute_wrap_hash(wrap_text: str) -> str:

@@ -28,6 +28,9 @@ from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 
 
+ORIGIN = 'https://wrapdb.example.com/v2/'
+
+
 class _DummyResponse:
     def __init__(self, data: bytes):
         self._data = data
@@ -412,7 +415,7 @@ def test_install_does_not_update_existing_lockfile(
     existing_hash = compute_wrap_hash('existing wrap')
     lockfile = Lockfile(
         dependencies={
-            'other': LockedPackage(version='1.0', wrap_hash=existing_hash),
+            'other': LockedPackage(version='1.0', wrap_hash=existing_hash, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -468,6 +471,7 @@ def test_install_does_not_warn_when_lockfile_already_matches(
             'shared': LockedPackage(
                 version='1.0.0',
                 wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin=ORIGIN,
             ),
         },
     )

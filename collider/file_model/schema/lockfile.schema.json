@@ -11,7 +11,8 @@
       "type": "object",
       "required": [
         "version",
-        "wrap_hash"
+        "wrap_hash",
+        "origin"
       ],
       "properties": {
         "version": {
@@ -21,6 +22,10 @@
         "wrap_hash": {
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "origin": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false

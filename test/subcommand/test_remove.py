@@ -25,6 +25,9 @@ from collider.utils.packaging.resolver import (
 )
 
 
+ORIGIN = 'https://wrapdb.example.com/v2/'
+
+
 def _init_project(tmp_path: Path, dependencies: list[Dependency] | None = None) -> None:
     (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
     colliderfile = Colliderfile(dependencies=dependencies or [])
@@ -71,6 +74,7 @@ def test_remove_deletes_dependency_and_installed_state(
             'shared': LockedPackage(
                 version='1.0.0',
                 wrap_hash='sha256:' + 'a' * 64,
+                origin=ORIGIN,
             ),
         }
     )
@@ -139,6 +143,7 @@ def test_remove_does_not_warn_when_lockfile_has_no_entry(
             'other': LockedPackage(
                 version='1.0.0',
                 wrap_hash='sha256:' + 'b' * 64,
+                origin=ORIGIN,
             )
         }
     )
@@ -170,11 +175,17 @@ def test_remove_cleans_up_orphaned_transitive_deps(tmp_path: Path) -> None:
 
     lockfile = Lockfile(
         dependencies={
-            'grpc': LockedPackage(version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64),
+            'grpc': LockedPackage(
+                version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64, origin=ORIGIN
+            ),
         },
         packages={
-            'abseil-cpp': LockedPackage(version='20250814.1-1', wrap_hash='sha256:' + 'b' * 64),
-            're2': LockedPackage(version='20230301-3', wrap_hash='sha256:' + 'c' * 64),
+            'abseil-cpp': LockedPackage(
+                version='20250814.1-1', wrap_hash='sha256:' + 'b' * 64, origin=ORIGIN
+            ),
+            're2': LockedPackage(
+                version='20230301-3', wrap_hash='sha256:' + 'c' * 64, origin=ORIGIN
+            ),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -215,12 +226,18 @@ def test_remove_keeps_shared_transitive_deps(tmp_path: Path) -> None:
 
     lockfile = Lockfile(
         dependencies={
-            'grpc': LockedPackage(version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64),
-            'other': LockedPackage(version='1.0.0', wrap_hash='sha256:' + 'b' * 64),
+            'grpc': LockedPackage(
+                version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64, origin=ORIGIN
+            ),
+            'other': LockedPackage(version='1.0.0', wrap_hash='sha256:' + 'b' * 64, origin=ORIGIN),
         },
         packages={
-            'shared-lib': LockedPackage(version='2.0.0', wrap_hash='sha256:' + 'c' * 64),
-            'grpc-only': LockedPackage(version='1.0.0', wrap_hash='sha256:' + 'd' * 64),
+            'shared-lib': LockedPackage(
+                version='2.0.0', wrap_hash='sha256:' + 'c' * 64, origin=ORIGIN
+            ),
+            'grpc-only': LockedPackage(
+                version='1.0.0', wrap_hash='sha256:' + 'd' * 64, origin=ORIGIN
+            ),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -279,11 +296,13 @@ def test_remove_skips_cleanup_when_no_dep_index(
 
     lockfile = Lockfile(
         dependencies={
-            'grpc': LockedPackage(version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64),
-            'other': LockedPackage(version='1.0.0', wrap_hash='sha256:' + 'b' * 64),
+            'grpc': LockedPackage(
+                version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64, origin=ORIGIN
+            ),
+            'other': LockedPackage(version='1.0.0', wrap_hash='sha256:' + 'b' * 64, origin=ORIGIN),
         },
         packages={
-            'orphan': LockedPackage(version='1.0.0', wrap_hash='sha256:' + 'c' * 64),
+            'orphan': LockedPackage(version='1.0.0', wrap_hash='sha256:' + 'c' * 64, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -327,12 +346,18 @@ def test_remove_cleanup_with_no_remaining_deps(tmp_path: Path) -> None:
 
     lockfile = Lockfile(
         dependencies={
-            'grpc': LockedPackage(version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64),
+            'grpc': LockedPackage(
+                version='1.59.1-1', wrap_hash='sha256:' + 'a' * 64, origin=ORIGIN
+            ),
         },
         packages={
-            'abseil-cpp': LockedPackage(version='20250814.1-1', wrap_hash='sha256:' + 'b' * 64),
-            're2': LockedPackage(version='20230301-3', wrap_hash='sha256:' + 'c' * 64),
-            'zlib': LockedPackage(version='1.3.2-1', wrap_hash='sha256:' + 'd' * 64),
+            'abseil-cpp': LockedPackage(
+                version='20250814.1-1', wrap_hash='sha256:' + 'b' * 64, origin=ORIGIN
+            ),
+            're2': LockedPackage(
+                version='20230301-3', wrap_hash='sha256:' + 'c' * 64, origin=ORIGIN
+            ),
+            'zlib': LockedPackage(version='1.3.2-1', wrap_hash='sha256:' + 'd' * 64, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
