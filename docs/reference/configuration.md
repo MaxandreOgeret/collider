@@ -119,17 +119,20 @@ consumed by `collider install`.
   "dependencies": {
     "my-lib": {
       "version": "1.2.0",
-      "wrap_hash": "sha256:abc123..."
+      "wrap_hash": "sha256:abc123...",
+      "origin": "https://wrapdb.mesonbuild.com/v2"
     },
     "fmt": {
       "version": "10.2.1",
-      "wrap_hash": "sha256:def456..."
+      "wrap_hash": "sha256:def456...",
+      "origin": "https://wrapdb.mesonbuild.com/v2"
     }
   },
   "packages": {
     "abseil-cpp": {
       "version": "20240116.2",
-      "wrap_hash": "sha256:..."
+      "wrap_hash": "sha256:...",
+      "origin": "https://wrapdb.mesonbuild.com/v2"
     }
   }
 }
@@ -146,8 +149,9 @@ Each entry under `dependencies` or `packages` contains:
 |--------------|--------|-----------------------------------------------------|
 | `version`    | string | Resolved version string.                            |
 | `wrap_hash`  | string | SHA-256 hash of the `.wrap` file text (e.g. `sha256:...`). |
+| `origin`     | string | Normalized URL of the source repository.            |
 
-The lockfile does not record which repository each package came from. When installing, Collider fetches each package by name and version from any configured repository, then verifies the wrap hash.
+The lockfile records the `origin` URL per package. When installing, Collider fetches each package from the configured repository matching that origin (URL normalization is applied when comparing). If no configured repository matches the origin, install fails with `EX_CONFIG`.
 
 The `wrap_hash` transitively pins archive hashes, filenames, and URLs because
 those values are embedded in the wrap file. This means a single hash detects

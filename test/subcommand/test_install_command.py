@@ -26,6 +26,9 @@ from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 
 
+ORIGIN = 'https://wrapdb.example.com/v2'
+
+
 class _DummyResponse:
     def __init__(self, data: bytes):
         self._data = data
@@ -85,13 +88,14 @@ def test_install_from_lockfile(tmp_path: Path, monkeypatch) -> None:
     )
 
     lockfile = Lockfile(
-        dependencies={'foo': LockedPackage(version='1.0.0', wrap_hash=wrap_hash)},
+        dependencies={'foo': LockedPackage(version='1.0.0', wrap_hash=wrap_hash, origin=ORIGIN)},
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
 
     repo = MagicMock(spec=RepositoryInterface)
     repo.get_package.return_value = package
     repo.requires_network.return_value = False
+    repo.origin_url = ORIGIN
     repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
     repo.search.return_value = {repo_key: RepoPackageEntry('foo', '1.0.0', PackageType.WRAP)}
 
@@ -122,7 +126,7 @@ def test_install_skips_already_installed(tmp_path: Path) -> None:
     )
 
     lockfile = Lockfile(
-        dependencies={'foo': LockedPackage(version='1.0.0', wrap_hash=wrap_hash)},
+        dependencies={'foo': LockedPackage(version='1.0.0', wrap_hash=wrap_hash, origin=ORIGIN)},
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
 
@@ -258,7 +262,7 @@ def test_install_warns_locked_not_declared(
 
     lockfile = Lockfile(
         dependencies={
-            'orphan': LockedPackage(version='1.0', wrap_hash=wrap_hash),
+            'orphan': LockedPackage(version='1.0', wrap_hash=wrap_hash, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -328,6 +332,7 @@ def test_install_warns_when_locked_version_violates_declared_constraint(
             'foo': LockedPackage(
                 version='2.0.0',
                 wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin=ORIGIN,
             ),
         },
     )
@@ -336,6 +341,7 @@ def test_install_warns_when_locked_version_violates_declared_constraint(
     repo = MagicMock(spec=RepositoryInterface)
     repo.get_package.return_value = package
     repo.requires_network.return_value = False
+    repo.origin_url = ORIGIN
     context = _make_context(tmp_path, repo)
     monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
 
@@ -367,7 +373,7 @@ def test_install_frozen_fails_when_lockfile_has_orphan_package(
 
     lockfile = Lockfile(
         dependencies={
-            'orphan': LockedPackage(version='1.0', wrap_hash=wrap_hash),
+            'orphan': LockedPackage(version='1.0', wrap_hash=wrap_hash, origin=ORIGIN),
         },
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
@@ -429,7 +435,7 @@ def test_install_frozen_fails_when_lockfile_violates_declared_constraint(
     )
 
     lockfile = Lockfile(
-        dependencies={'foo': LockedPackage(version='2.0.0', wrap_hash=wrap_hash)},
+        dependencies={'foo': LockedPackage(version='2.0.0', wrap_hash=wrap_hash, origin=ORIGIN)},
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
 
@@ -468,8 +474,8 @@ def test_install_frozen_fails_without_lockfile(tmp_path: Path) -> None:
         os.chdir(cwd)
 
 
-def test_install_frozen_fails_on_hash_mismatch(tmp_path: Path) -> None:
-    """Frozen mode fails when fetched wrap hash differs from lockfile."""
+def test_install_always_fails_on_hash_mismatch(tmp_path: Path) -> None:
+    """Install always fails when fetched wrap hash differs from lockfile."""
     content = b'payload'
     package = _make_package('pkg', '1.0.0', content)
 
@@ -483,6 +489,7 @@ def test_install_frozen_fails_on_hash_mismatch(tmp_path: Path) -> None:
             'pkg': LockedPackage(
                 version='1.0.0',
                 wrap_hash='sha256:' + 'f' * 64,
+                origin=ORIGIN,
             ),
         },
     )
@@ -491,18 +498,19 @@ def test_install_frozen_fails_on_hash_mismatch(tmp_path: Path) -> None:
     repo = MagicMock(spec=RepositoryInterface)
     repo.get_package.return_value = package
     repo.requires_network.return_value = False
+    repo.origin_url = ORIGIN
     repo_key = make_repo_key('pkg', '1.0.0', PackageType.WRAP)
     repo.search.return_value = {repo_key: RepoPackageEntry('pkg', '1.0.0', PackageType.WRAP)}
 
     context = _make_context(tmp_path, repo)
 
-    args = argparse.Namespace(offline=False, frozen=True)
+    args = argparse.Namespace(offline=False, frozen=False)
     cmd = Install(args, context)
 
     cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        assert cmd.execute() != os.EX_OK
+        assert cmd.execute() == os.EX_DATAERR
     finally:
         os.chdir(cwd)
 
@@ -524,6 +532,7 @@ def test_install_frozen_fails_when_no_repo_provides_package(
             'pkg': LockedPackage(
                 version='1.0.0',
                 wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin=ORIGIN,
             ),
         },
     )
@@ -532,6 +541,7 @@ def test_install_frozen_fails_when_no_repo_provides_package(
     repo = MagicMock(spec=RepositoryInterface)
     repo.get_package.return_value = None
     repo.requires_network.return_value = False
+    repo.origin_url = ORIGIN
     context = _make_context(tmp_path, repo, repo_name='repo1')
 
     args = argparse.Namespace(offline=False, frozen=True)
@@ -544,13 +554,11 @@ def test_install_frozen_fails_when_no_repo_provides_package(
     finally:
         os.chdir(cwd)
 
-    assert 'not found in any repository' in caplog.text
+    assert 'not found in origin repository' in caplog.text
 
 
-def test_install_searches_all_repos_for_locked_package(
-    tmp_path: Path, monkeypatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Install searches all configured repos for locked packages."""
+def test_install_fetches_from_origin_repo(tmp_path: Path, monkeypatch) -> None:
+    """Install fetches from the origin repository recorded in the lockfile."""
     content = b'payload'
     package = _make_package('pkg', '1.0.0', content)
 
@@ -564,6 +572,7 @@ def test_install_searches_all_repos_for_locked_package(
             'pkg': LockedPackage(
                 version='1.0.0',
                 wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin=ORIGIN,
             ),
         },
     )
@@ -572,6 +581,7 @@ def test_install_searches_all_repos_for_locked_package(
     repo = MagicMock(spec=RepositoryInterface)
     repo.get_package.return_value = package
     repo.requires_network.return_value = False
+    repo.origin_url = ORIGIN
     context = _make_context(tmp_path, repo, repo_name='repo1')
     monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
 
@@ -695,3 +705,220 @@ def test_install_cross_root_conflict_detected(
 
     assert result == os.EX_UNAVAILABLE
     assert any('resolution failed' in m.lower() for m in caplog.messages)
+
+
+# -- Origin constraint -------------------------------------------------------
+
+
+def test_install_fails_when_origin_repo_not_configured(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Install fails with EX_CONFIG when no configured repo matches the locked origin."""
+    content = b'payload'
+    package = _make_package('pkg', '1.0.0', content)
+
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('pkg', DependencySource.COLLIDER, None)],
+    )
+
+    lockfile = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(
+                version='1.0.0',
+                wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin='https://missing.example.com/',
+            ),
+        },
+    )
+    lockfile.save(tmp_path / Lockfile.get_filename())
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.origin_url = ORIGIN
+    repo.requires_network.return_value = False
+    context = _make_context(tmp_path, repo)
+
+    args = argparse.Namespace(offline=False, frozen=False)
+    cmd = Install(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert cmd.execute() == os.EX_CONFIG
+    finally:
+        os.chdir(cwd)
+
+    assert 'no configured repository matches that origin' in caplog.text
+
+
+def test_install_origin_url_normalization(tmp_path: Path, monkeypatch) -> None:
+    """URL normalization matches origins despite case and trailing slash differences."""
+    content = b'payload'
+    package = _make_package('pkg', '1.0.0', content)
+
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('pkg', DependencySource.COLLIDER, None)],
+    )
+
+    lockfile = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(
+                version='1.0.0',
+                wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin='https://WrapDB.Example.COM/v2/',
+            ),
+        },
+    )
+    lockfile.save(tmp_path / Lockfile.get_filename())
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.get_package.return_value = package
+    repo.requires_network.return_value = False
+    repo.origin_url = 'https://wrapdb.example.com/v2'
+    context = _make_context(tmp_path, repo)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+
+    args = argparse.Namespace(offline=False, frozen=False)
+    cmd = Install(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert (tmp_path / 'subprojects' / 'pkg.wrap').exists()
+
+
+def test_install_origin_url_normalization_rejects_different_host(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Different hostnames do not match even after URL normalization."""
+    content = b'payload'
+    package = _make_package('pkg', '1.0.0', content)
+
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('pkg', DependencySource.COLLIDER, None)],
+    )
+
+    lockfile = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(
+                version='1.0.0',
+                wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin='https://a.example.com/v2/',
+            ),
+        },
+    )
+    lockfile.save(tmp_path / Lockfile.get_filename())
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.origin_url = 'https://b.example.com/v2/'
+    repo.requires_network.return_value = False
+    context = _make_context(tmp_path, repo)
+
+    args = argparse.Namespace(offline=False, frozen=False)
+    cmd = Install(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert cmd.execute() == os.EX_CONFIG
+    finally:
+        os.chdir(cwd)
+
+    assert 'no configured repository matches that origin' in caplog.text
+
+
+def test_install_offline_uses_cache_with_provenance_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Offline install falls back to cache and emits a provenance warning."""
+    content = b'payload'
+    package = _make_package('pkg', '1.0.0', content)
+
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('pkg', DependencySource.COLLIDER, None)],
+    )
+
+    lockfile = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(
+                version='1.0.0',
+                wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin=ORIGIN,
+            ),
+        },
+    )
+    lockfile.save(tmp_path / Lockfile.get_filename())
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.origin_url = ORIGIN
+    repo.requires_network.return_value = True
+    repo.get_package.side_effect = AssertionError('Should not fetch in offline mode')
+
+    context = _make_context(tmp_path, repo)
+    context.cache.store_wrap(package)
+
+    content_hash = hashlib.sha256(content).hexdigest()
+    context.cache.archives_dir.mkdir(parents=True, exist_ok=True)
+    (context.cache.archives_dir / f'{content_hash}-pkg.tar.xz').write_bytes(content)
+
+    args = argparse.Namespace(offline=True, frozen=False)
+    cmd = Install(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert 'Origin provenance cannot be verified' in caplog.text
+    assert (tmp_path / 'subprojects' / 'pkg.wrap').exists()
+
+
+def test_install_offline_origin_repo_not_cached_fails(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Offline install fails when origin repo requires network and nothing is cached."""
+    content = b'payload'
+    package = _make_package('pkg', '1.0.0', content)
+
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('pkg', DependencySource.COLLIDER, None)],
+    )
+
+    lockfile = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(
+                version='1.0.0',
+                wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin=ORIGIN,
+            ),
+        },
+    )
+    lockfile.save(tmp_path / Lockfile.get_filename())
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.origin_url = ORIGIN
+    repo.requires_network.return_value = True
+
+    context = _make_context(tmp_path, repo)
+
+    args = argparse.Namespace(offline=True, frozen=False)
+    cmd = Install(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert cmd.execute() == os.EX_UNAVAILABLE
+    finally:
+        os.chdir(cwd)
+
+    assert 'not found in cache' in caplog.text

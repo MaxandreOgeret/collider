@@ -38,6 +38,7 @@ from collider.utils.packaging.resolver import (
     build_dep_name_index,
     resolve_all_dependencies,
 )
+from collider.utils.url import normalize_url
 
 
 class Install(SubcommandInterface):
@@ -54,8 +55,13 @@ class Install(SubcommandInterface):
         del cls
         return (
             'Install dependencies declared in collider.json, preferring collider.lock when '
-            'present.\nUse `collider lock` to write collider.lock explicitly. '
-            'Use --frozen to enforce lockfile-only installs and fail on lock drift.'
+            'present.\nWhen using a lockfile, install requires the origin repository for each '
+            'package to be configured. A wrap hash mismatch between the fetched package and '
+            'the lockfile is always a hard failure (EX_DATAERR), regardless of --frozen.\n'
+            'Use --frozen to enforce lockfile-only installs and fail on lock drift '
+            '(collider.json vs collider.lock mismatches).\nWith --offline, if the origin '
+            'repository requires network access, install falls back to the local cache with '
+            'a provenance warning.'
         )
 
     @staticmethod
@@ -180,7 +186,11 @@ class Install(SubcommandInterface):
                 logger.info(f'Package "{name}" is up to date.')
                 continue
 
-            package = self._fetch_locked_package(name, locked, repos)
+            origin_repo = self._find_origin_repo(name, locked.origin, repos)
+            if origin_repo is None:
+                return os.EX_CONFIG
+
+            package = self._fetch_from_origin(name, locked, origin_repo)
             if package is None:
                 return os.EX_UNAVAILABLE
 
@@ -190,9 +200,7 @@ class Install(SubcommandInterface):
                     f'Wrap hash mismatch for "{name}": '
                     f'expected {locked.wrap_hash}, got {actual_hash}.'
                 )
-                if self.frozen:
-                    return os.EX_DATAERR
-                logger.warning('Proceeding despite hash mismatch (not frozen).')
+                return os.EX_DATAERR
 
             if not self._do_install(name, package):
                 return os.EX_IOERR
@@ -320,40 +328,62 @@ class Install(SubcommandInterface):
         installed_text = wrap_path.read_text(encoding='utf-8')
         return compute_wrap_hash(installed_text) == locked.wrap_hash
 
-    def _fetch_locked_package(
+    def _find_origin_repo(
+        self,
+        name: str,
+        origin: str,
+        repos: dict[str, RepositoryInterface],
+    ) -> Optional[RepositoryInterface]:
+        """
+        Find the configured repository matching a locked origin URL.
+        :param name: Package name for diagnostics.
+        :param origin: Origin URL from lockfile.
+        :param repos: Configured repositories.
+        """
+        normalized_origin = normalize_url(origin)
+        for _repo_name, repo in repos.items():
+            if normalize_url(repo.origin_url) == normalized_origin:
+                return repo
+        logger.critical(
+            f'Package "{name}" was locked from "{origin}" '
+            f'but no configured repository matches that origin.'
+        )
+        return None
+
+    def _fetch_from_origin(
         self,
         name: str,
         locked: LockedPackage,
-        repos: dict[str, RepositoryInterface],
+        origin_repo: RepositoryInterface,
     ) -> Optional[WrapPackage]:
         """
-        Fetch a package by name+version from any configured repository.
+        Fetch a package from its origin repository.
         :param name: Package name.
         :param locked: Locked entry with version.
-        :param repos: Available repositories.
-        :return: Fetched WrapPackage or None.
+        :param origin_repo: Repository matching the locked origin.
         """
         repo_key = make_repo_key(name, locked.version, PackageType.WRAP)
 
-        for _repo_name, repo in repos.items():
-            if self.offline and repo.requires_network():
-                continue
-            package = repo.get_package(repo_key)
-            if package is not None and isinstance(package, WrapPackage):
-                self.context.cache.store_wrap(package)
-                return package
-
-        package = self.context.cache.load_wrap(name, locked.version)
-        if package is not None:
-            logger.info(f'Using cached wrap for "{name}".')
+        if self.offline and origin_repo.requires_network():
+            package = self.context.cache.load_wrap(name, locked.version)
+            if package is None:
+                logger.critical(f'Package "{name}" not found in cache for offline install.')
+                return None
+            logger.warning(
+                f'Offline: using cached wrap for "{name}". '
+                f'Origin provenance cannot be verified without network access.'
+            )
             return package
 
-        if self.offline:
-            logger.critical(f'Package "{name}" not found in cache for offline install.')
-        else:
-            logger.critical(
-                f'Package "{name}" version "{locked.version}" not found in any repository.'
-            )
+        package = origin_repo.get_package(repo_key)
+        if package is not None and isinstance(package, WrapPackage):
+            self.context.cache.store_wrap(package)
+            return package
+
+        logger.critical(
+            f'Package "{name}" version "{locked.version}" not found '
+            f'in origin repository "{locked.origin}".'
+        )
         return None
 
     def _resolve_newest(

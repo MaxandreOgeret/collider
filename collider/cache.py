@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -153,6 +154,24 @@ class WrapCache:
             logger.debug(f'Corrupt scan cache for "{name}" {version}, ignoring.')
             return None
 
+    def verify_archives(self, package: WrapPackage, offline: bool) -> None:
+        """
+        Download/cache and verify archive hashes without copying to packagecache.
+        :param package: Package whose archives to verify.
+        :param offline: If True, only check the local cache.
+        :raises ValueError: On hash mismatch.
+        :raises FileNotFoundError: When archive is missing in offline mode.
+        """
+        self._ensure_archive(
+            package.source_url, package.source_filename, package.source_hash, offline
+        )
+        if package.patch_url:
+            if not package.patch_filename or not package.patch_hash:
+                raise ValueError('Wrap file patch metadata is incomplete.')
+            self._ensure_archive(
+                package.patch_url, package.patch_filename, package.patch_hash, offline
+            )
+
     def prepare_packagecache(
         self, package: WrapPackage, subprojects_dir: Path, offline: bool
     ) -> None:
@@ -189,9 +208,13 @@ class WrapCache:
         cached_path = self.archives_dir / f'{expected_hash}-{safe_name}'
 
         if cached_path.exists():
-            if compute_file_hash(cached_path) == expected_hash:
+            cached_hash = compute_file_hash(cached_path)
+            if cached_hash == expected_hash:
                 return cached_path
-            # Hash mismatch means cache corruption or a stale entry.
+            logger.warning(
+                f'Cached archive "{safe_name}" is corrupt: '
+                f'expected {expected_hash}, got {cached_hash}. Re-downloading.'
+            )
             cached_path.unlink()
 
         parsed = urllib.parse.urlparse(url)
@@ -209,7 +232,10 @@ class WrapCache:
 
             file_hash = compute_file_hash(local_path)
             if file_hash != expected_hash:
-                raise ValueError(f'Archive hash mismatch for "{safe_name}".')
+                raise ValueError(
+                    f'Archive hash mismatch for "{safe_name}": '
+                    f'expected {expected_hash}, got {file_hash}.'
+                )
 
             cached_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(local_path, cached_path)
@@ -221,13 +247,22 @@ class WrapCache:
 
         with tempfile.NamedTemporaryFile('wb+', delete=False) as tmp_file:
             tmp_path = Path(tmp_file.name)
-            with urllib.request.urlopen(url, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
-                tmp_file.write(response.read())
+            try:
+                with urllib.request.urlopen(url, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
+                    tmp_file.write(response.read())
+            except urllib.error.URLError as exc:
+                tmp_path.unlink(missing_ok=True)
+                raise FileNotFoundError(
+                    f'Failed to download archive "{safe_name}" from "{url}": {exc}'
+                ) from exc
 
         file_hash = compute_file_hash(tmp_path)
         if file_hash != expected_hash:
             tmp_path.unlink(missing_ok=True)
-            raise ValueError(f'Archive hash mismatch for "{safe_name}".')
+            raise ValueError(
+                f'Archive hash mismatch for "{safe_name}": '
+                f'expected {expected_hash}, got {file_hash}.'
+            )
 
         cached_path.parent.mkdir(parents=True, exist_ok=True)
         try:

@@ -40,6 +40,10 @@ In offline mode, Collider:
   dependency before attempting network access. If a cached wrap exists, it
   is used for scanning without going online. If no cache entry is found, the
   dependency is skipped with a warning.
+- When installing from a lockfile, falls back to the local cache if the
+  origin repository requires network access and emits a warning that origin
+  provenance cannot be verified. The `wrap_hash` check still ensures content
+  integrity.
 
 ## Meson Package Cache
 

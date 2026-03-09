@@ -187,6 +187,8 @@ Collider maintains a local cache under `~/.config/collider/cache/`:
 
 On install, Collider populates `subprojects/packagecache/` so Meson can build offline.
 Use `--offline` to disable network access and rely on the local cache.
+When installing from a lockfile with `--offline`, if the origin repository requires network access,
+Collider falls back to the local cache and emits a warning that origin provenance cannot be verified.
 
 Wrap files must include `source_url`, `source_filename`, and `source_hash`; patch fields are optional
 but must be complete when present. Patch archives are typically used for third-party sources.

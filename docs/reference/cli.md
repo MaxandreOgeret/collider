@@ -66,6 +66,15 @@ collider lock [--offline]
 Install dependencies. Uses `collider.lock` when present, falls back to
 `collider.json` otherwise.
 
+When using `collider.lock`, install requires each package's origin repository
+to be configured. The origin is the repository URL recorded in the lockfile at
+lock time. If a configured repository's URL does not match the locked origin
+(after URL normalization), install fails with `EX_CONFIG`.
+
+With `--offline`, if the origin repository requires network access, install
+falls back to the local cache and emits a warning that origin provenance cannot
+be verified.
+
 ```bash
 collider install [--frozen] [--offline]
 ```

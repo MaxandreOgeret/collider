@@ -222,6 +222,7 @@ def test_prepare_ctor_kwargs_handles_generic_alias_when_isclass_is_true():
                     'shared': {
                         'version': '1.0',
                         'wrap_hash': 'sha256:' + 'a' * 64,
+                        'origin': 'https://wrapdb.example.com/v2/',
                     }
                 },
                 'packages': {},

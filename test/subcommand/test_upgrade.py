@@ -28,6 +28,9 @@ from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 
 
+ORIGIN = 'https://wrapdb.example.com/v2/'
+
+
 class _DummyResponse:
     def __init__(self, data: bytes):
         self._data = data
@@ -98,6 +101,7 @@ def test_upgrade_one_package_replaces_existing_wrap(
             'shared': LockedPackage(
                 version='1.0.0',
                 wrap_hash='sha256:' + '0' * 64,
+                origin=ORIGIN,
             )
         }
     )
@@ -292,6 +296,7 @@ def test_upgrade_does_not_warn_when_lockfile_already_matches(
             'shared': LockedPackage.from_wrap_text(
                 version='2.0.0',
                 wrap_text=package.wrap_text,
+                origin=ORIGIN,
             )
         }
     )

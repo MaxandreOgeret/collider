@@ -18,12 +18,16 @@ HASH_X = 'sha256:' + '0' * 64
 HASH_OLD = 'sha256:' + '1' * 64
 HASH_NEW = 'sha256:' + '2' * 64
 
+ORIGIN = 'https://wrapdb.example.com/v2/'
+ORIGIN_B = 'https://other.example.com/v2/'
+
 
 def test_locked_package_instantiation() -> None:
     """Test LockedPackage instantiation with required fields."""
-    pkg = LockedPackage(version='1.2.3', wrap_hash=HASH_A)
+    pkg = LockedPackage(version='1.2.3', wrap_hash=HASH_A, origin=ORIGIN)
     assert pkg.version == '1.2.3'
     assert pkg.wrap_hash == HASH_A
+    assert pkg.origin == ORIGIN
 
 
 def test_lockfile_instantiation_defaults() -> None:
@@ -37,10 +41,10 @@ def test_lockfile_instantiation_defaults() -> None:
 def test_lockfile_instantiation_with_packages() -> None:
     """Test Lockfile instantiation with dependencies and packages."""
     deps = {
-        'foo': LockedPackage(version='1.0', wrap_hash=HASH_A),
+        'foo': LockedPackage(version='1.0', wrap_hash=HASH_A, origin=ORIGIN),
     }
     pkgs = {
-        'bar': LockedPackage(version='2.0', wrap_hash=HASH_B),
+        'bar': LockedPackage(version='2.0', wrap_hash=HASH_B, origin=ORIGIN_B),
     }
     lf = Lockfile(dependencies=deps, packages=pkgs)
     assert len(lf.dependencies) == 1
@@ -52,8 +56,8 @@ def test_lockfile_instantiation_with_packages() -> None:
 def test_lockfile_all_packages() -> None:
     """Test all_packages property merges dependencies and packages."""
     lf = Lockfile(
-        dependencies={'foo': LockedPackage(version='1.0', wrap_hash=HASH_A)},
-        packages={'bar': LockedPackage(version='2.0', wrap_hash=HASH_B)},
+        dependencies={'foo': LockedPackage(version='1.0', wrap_hash=HASH_A, origin=ORIGIN)},
+        packages={'bar': LockedPackage(version='2.0', wrap_hash=HASH_B, origin=ORIGIN_B)},
     )
     all_pkgs = lf.all_packages
     assert len(all_pkgs) == 2
@@ -70,13 +74,14 @@ def test_lockfile_as_dict() -> None:
     """Test Lockfile serialization to dict."""
     lf = Lockfile(
         dependencies={
-            'pkg': LockedPackage(version='3.0', wrap_hash=HASH_C),
+            'pkg': LockedPackage(version='3.0', wrap_hash=HASH_C, origin=ORIGIN),
         },
     )
     d = lf.as_dict()
     assert d['version'] == 1
     assert d['dependencies']['pkg']['version'] == '3.0'
     assert d['dependencies']['pkg']['wrap_hash'] == HASH_C
+    assert d['dependencies']['pkg']['origin'] == ORIGIN
     assert 'repository' not in d['dependencies']['pkg']
 
 
@@ -92,7 +97,7 @@ def test_lockfile_save_load(tmp_path: Path) -> None:
     path = tmp_path / 'collider.lock'
     lf = Lockfile(
         dependencies={
-            'x': LockedPackage(version='1.0', wrap_hash=HASH_X),
+            'x': LockedPackage(version='1.0', wrap_hash=HASH_X, origin=ORIGIN),
         },
     )
     lf.save(path)
@@ -102,6 +107,7 @@ def test_lockfile_save_load(tmp_path: Path) -> None:
     assert len(loaded.dependencies) == 1
     assert loaded.dependencies['x'].version == '1.0'
     assert loaded.dependencies['x'].wrap_hash == HASH_X
+    assert loaded.dependencies['x'].origin == ORIGIN
 
 
 def test_lockfile_save_load_multiple(tmp_path: Path) -> None:
@@ -109,23 +115,25 @@ def test_lockfile_save_load_multiple(tmp_path: Path) -> None:
     path = tmp_path / 'collider.lock'
     lf = Lockfile(
         dependencies={
-            'a': LockedPackage(version='1.0', wrap_hash=HASH_A),
+            'a': LockedPackage(version='1.0', wrap_hash=HASH_A, origin=ORIGIN),
         },
         packages={
-            'b': LockedPackage(version='2.0', wrap_hash=HASH_B),
+            'b': LockedPackage(version='2.0', wrap_hash=HASH_B, origin=ORIGIN_B),
         },
     )
     lf.save(path)
     loaded = Lockfile.from_path(path)
     assert loaded.dependencies['a'].wrap_hash == HASH_A
+    assert loaded.dependencies['a'].origin == ORIGIN
     assert loaded.packages['b'].wrap_hash == HASH_B
+    assert loaded.packages['b'].origin == ORIGIN_B
 
 
 def test_lockfile_validation() -> None:
     """Test Lockfile validation against schema."""
     lf = Lockfile(
         dependencies={
-            'd': LockedPackage(version='1.0', wrap_hash=HASH_D),
+            'd': LockedPackage(version='1.0', wrap_hash=HASH_D, origin=ORIGIN),
         },
     )
     assert lf.validate() is True
@@ -175,15 +183,91 @@ def test_lockfile_update_package(tmp_path: Path) -> None:
     path = tmp_path / 'collider.lock'
     lf = Lockfile(
         dependencies={
-            'pkg': LockedPackage(version='1.0', wrap_hash=HASH_OLD),
+            'pkg': LockedPackage(version='1.0', wrap_hash=HASH_OLD, origin=ORIGIN),
         },
     )
     lf.save(path)
 
     loaded = Lockfile.from_path(path)
-    loaded.dependencies['pkg'] = LockedPackage(version='2.0', wrap_hash=HASH_NEW)
+    loaded.dependencies['pkg'] = LockedPackage(version='2.0', wrap_hash=HASH_NEW, origin=ORIGIN)
     loaded.save()
 
     reloaded = Lockfile.from_path(path)
     assert reloaded.dependencies['pkg'].version == '2.0'
     assert reloaded.dependencies['pkg'].wrap_hash == HASH_NEW
+
+
+# -- Origin happy path tests --------------------------------------------------
+
+
+def test_from_wrap_text_records_origin() -> None:
+    """from_wrap_text factory stores the provided origin."""
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+    )
+    pkg = LockedPackage.from_wrap_text('1.0', wrap_text, ORIGIN)
+    assert pkg.origin == ORIGIN
+    assert pkg.version == '1.0'
+    assert pkg.wrap_hash == compute_wrap_hash(wrap_text)
+
+
+def test_lockfile_origin_survives_round_trip_with_special_chars(tmp_path: Path) -> None:
+    """Origin URLs with path and query parameters survive serialization."""
+    origin = 'https://host.example.com:8443/repo/v2/?token=abc'
+    path = tmp_path / 'collider.lock'
+    lf = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(version='1.0', wrap_hash=HASH_A, origin=origin),
+        },
+    )
+    lf.save(path)
+    loaded = Lockfile.from_path(path)
+    assert loaded.dependencies['pkg'].origin == origin
+
+
+# -- Origin non-happy path tests ----------------------------------------------
+
+
+def test_lockfile_validation_fails_missing_origin() -> None:
+    """Lockfile entry without origin fails schema validation."""
+    lf = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(version='1.0', wrap_hash=HASH_A, origin=ORIGIN),
+        },
+    )
+    d = lf.as_dict()
+    del d['dependencies']['pkg']['origin']
+
+    import jsonschema
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(d, schema=lf.schema)
+
+
+def test_lockfile_validation_fails_empty_origin() -> None:
+    """Lockfile entry with empty origin fails schema validation."""
+    lf = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(version='1.0', wrap_hash=HASH_A, origin=''),
+        },
+    )
+    assert lf.validate() is False
+
+
+def test_lockfile_validation_fails_non_string_origin() -> None:
+    """Lockfile entry with non-string origin fails schema validation."""
+    lf = Lockfile(
+        dependencies={
+            'pkg': LockedPackage(version='1.0', wrap_hash=HASH_A, origin=ORIGIN),
+        },
+    )
+    d = lf.as_dict()
+    d['dependencies']['pkg']['origin'] = 123
+
+    import jsonschema
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(d, schema=lf.schema)

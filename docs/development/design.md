@@ -209,15 +209,18 @@ Searches configured repositories by name and optional version constraint.
 ### `install`
 
 - If `collider.lock` exists, restores all packages from it.
-    - Fetches each package by name+version from any configured repository (searching until one provides it).
+    - For each locked package, finds the configured repository whose URL matches the recorded `origin` (URL normalization applied). Fails with `EX_CONFIG` if no configured repository matches.
+    - Fetches the package from the origin repository. Fails with `EX_UNAVAILABLE` if the origin repository does not provide the package. No fallback to other repositories.
     - Verifies the fetched wrap hash against the locked `wrap_hash`.
     - Skips packages whose installed wrap already matches the locked hash.
+    - With `--offline`, if the origin repository requires network access, falls back to the local cache and emits a provenance warning. The `wrap_hash` check still protects content integrity.
 - If no lockfile exists, falls back to resolving from `collider.json` (including transitive dependencies) without writing `collider.lock`.
 - When both files exist, warns on incompatibilities:
     - Locked package not declared in `collider.json`.
     - Declared dependency with no lock entry.
     - Locked version that does not satisfy a version specifier in `collider.json`.
-- `--frozen`: refuses to modify `collider.lock`; fails if lock is missing or stale. Intended for CI.
+- Wrap hash verification is unconditional: a mismatch between the fetched package and the lockfile always fails with `EX_DATAERR`, regardless of `--frozen`.
+- `--frozen`: refuses to modify `collider.lock`; fails if lock is missing or stale (lockfile drift). Intended for CI.
 - `--offline`: disables network access and relies on local cache.
 
 ## Cache and Offline Mode
@@ -244,8 +247,8 @@ Searches configured repositories by name and optional version constraint.
 ### `collider.lock`
 
 - Pinned resolution state for reproducible installs.
-- **`dependencies`**: Direct dependencies (from `collider.json`). Each entry has `version` (str) and `wrap_hash` (str).
-- **`packages`**: Transitive dependencies only. Same entry shape. No `repository` field; install fetches by name+version from any configured repository and verifies `wrap_hash`.
+- **`dependencies`**: Direct dependencies (from `collider.json`). Each entry has `version` (str), `wrap_hash` (str), and `origin` (str, normalized repository URL).
+- **`packages`**: Transitive dependencies only. Same entry shape. Install fetches from the configured repository matching the locked `origin` and verifies `wrap_hash`.
 - `wrap_hash` is a SHA-256 of the `.wrap` file text, which transitively pins archive hashes, filenames, and URLs.
 - System dependencies are not locked (no wrap artifact to pin).
 - `collider.json` represents intent (requested dependencies and optional constraints); `collider.lock` represents resolution (exact versions and integrity hashes).
@@ -440,7 +443,7 @@ When `--offline` is set and a repository requires network access, the resolver c
 ### Impact on `collider.json` and `collider.lock`
 
 - `collider.json` contains only direct (user-declared) dependencies, with optional `include`/`exclude` and `include_conditional`/`exclude_optional` for transitive dependency control.
-- `collider.lock` contains all dependencies (direct in `dependencies`, transitive in `packages`) with resolved versions and wrap hashes (no repository field).
+- `collider.lock` contains all dependencies (direct in `dependencies`, transitive in `packages`) with resolved versions, wrap hashes, and `origin` (normalized repository URL) per entry.
 - `pkg add` installs direct and transitive wraps into `subprojects/` but only adds the direct dependency to `collider.json`.
 - `install` from lockfile restores everything (direct + transitive).
 - `install` without a lockfile resolves from `collider.json` using multi-root resolution.

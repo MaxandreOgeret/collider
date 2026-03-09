@@ -16,17 +16,18 @@ dependencies are resolved in a single pass so that cross-root conflicts
 (e.g. two packages requiring incompatible versions of the same transitive
 dependency) are detected and reported. The lockfile has two sections:
 
-- **`dependencies`**: Direct dependencies (from `collider.json`). Each entry has `version` and `wrap_hash`.
+- **`dependencies`**: Direct dependencies (from `collider.json`). Each entry has `version`, `wrap_hash`, and `origin`.
 - **`packages`**: Transitive dependencies only. Same entry shape.
 
 Each locked entry contains:
 
-| Field        | Description                                           |
-|--------------|-------------------------------------------------------|
-| `version`    | The resolved version string.                          |
-| `wrap_hash`  | SHA-256 of the `.wrap` file text (e.g. `sha256:...`). |
+| Field        | Description                                                   |
+|--------------|---------------------------------------------------------------|
+| `version`    | The resolved version string.                                  |
+| `wrap_hash`  | SHA-256 of the `.wrap` file text (e.g. `sha256:...`).         |
+| `origin`     | Normalized URL of the repository this package was resolved from. |
 
-The lockfile does not store which repository each package came from. The `wrap_hash` transitively pins archive hashes, filenames, and URLs because those values are embedded in the wrap file itself.
+The `wrap_hash` transitively pins archive hashes, filenames, and URLs because those values are embedded in the wrap file itself. The `origin` URL is normalized at write time (lowercased scheme/host, trailing slash stripped) so lockfile diffs are stable across trivial URL variations.
 
 Use `--offline` to resolve only from the local cache:
 
@@ -42,13 +43,20 @@ collider install
 
 When `collider.lock` exists, `install` restores all packages from it:
 
-1. Fetches each package by name and version from any configured repository (searching until one provides it).
-2. Verifies the fetched wrap hash against the recorded `wrap_hash`.
-3. Skips packages whose installed wrap already matches the lock.
+1. For each locked package, finds the configured repository whose URL matches the recorded `origin` (URL normalization is applied when comparing). If no configured repository matches, install fails with `EX_CONFIG`.
+2. Fetches the package from the origin repository. If the origin repository does not provide the package, install fails with `EX_UNAVAILABLE`. There is no fallback to other repositories.
+3. Verifies the fetched wrap hash against the recorded `wrap_hash`.
+4. Skips packages whose installed wrap already matches the lock.
 
 If no lockfile exists, Collider falls back to resolving from `collider.json`
 (including transitive dependencies) without writing a lockfile. Like `lock`,
 this uses unified multi-root resolution to detect cross-root conflicts.
+
+### Hash Verification
+
+Wrap hash mismatches between the fetched package and the lockfile are always
+a hard failure, regardless of `--frozen`. This is a security boundary: a
+mismatch indicates tampering, republishing, or corruption.
 
 ### Frozen Installs
 
@@ -58,8 +66,9 @@ For CI pipelines, use `--frozen` to refuse any lockfile modifications:
 collider install --frozen
 ```
 
-This fails if the lockfile is missing or stale, ensuring builds are fully
-reproducible.
+This fails if the lockfile is missing or stale (collider.json vs collider.lock
+drift), ensuring builds are fully reproducible. Note that hash verification
+is unconditional and does not require `--frozen`.
 
 ### Offline Installs
 
@@ -67,7 +76,11 @@ reproducible.
 collider install --offline
 ```
 
-Network access is disabled. Only cached wraps and archives are used.
+Network access is disabled. Only cached wraps and archives are used. When
+installing from a lockfile with `--offline`, if the origin repository requires
+network access, Collider falls back to the local cache and emits a warning that
+origin provenance cannot be verified. The `wrap_hash` check still protects
+content integrity.
 
 ## Lock Drift Detection
 
