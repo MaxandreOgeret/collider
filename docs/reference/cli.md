@@ -203,14 +203,15 @@ collider pkg add <name> [--version SPEC] [--offline] [--force]
 | `--include-conditional` | Also resolve dependencies inside Meson `if` blocks.  |
 | `--exclude-optional` | Skip optional (`required: false`) dependencies.          |
 
-Fails if the package is already installed unless `--force` is given. Does not update `collider.lock`.
+Fails if the package is already installed unless `--force` is given. If the wrap is installed only as a transitive dependency, `pkg add` promotes it into `collider.json` without reinstalling it. Does not update `collider.lock`.
 
 ---
 
 ## `pkg remove`
 
-Remove a dependency from `collider.json` and delete its wrap from
-`subprojects/`. Orphaned transitive dependencies (no longer needed by any remaining direct dependency) are removed only when a lockfile exists; only wraps listed in the lockfile are considered for cleanup (manual wraps are never removed).
+Remove a dependency from `collider.json`. Collider removes the installed wrap
+only when it can prove the package is no longer needed; otherwise it leaves
+the wrap in place.
 
 ```bash
 collider pkg remove <name>
@@ -218,7 +219,33 @@ collider pkg remove <name>
 
 Alias: `collider pkg rm <name>`
 
+| Option    | Description                                          |
+|-----------|------------------------------------------------------|
+| `--prune` | Also remove orphaned transitive dependencies (runs `pkg prune` after removal). |
+
 Does not update `collider.lock`; you are warned to run `collider lock` if the removed package is still in the lockfile.
+
+---
+
+## `pkg prune`
+
+Remove orphaned Collider-managed transitive wraps that are no longer needed
+by any declared dependency. Only wraps proven to be Collider-managed via
+`collider.lock` are eligible for removal; manually placed wraps are never
+touched.
+
+```bash
+collider pkg prune [--dry-run]
+```
+
+| Option      | Description                                        |
+|-------------|----------------------------------------------------|
+| `--dry-run` | List orphaned wraps without removing them.         |
+
+If no lockfile exists, `prune` warns and does nothing. A corrupt lockfile is
+treated the same way to avoid accidental deletion.
+`pkg prune` does not rewrite `collider.lock`; after deletions, Collider warns
+you to run `collider lock` to refresh it.
 
 ---
 

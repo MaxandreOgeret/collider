@@ -20,7 +20,7 @@ Interface = SubcommandInterface
 
 # Mutable holder so we can cache without a global statement (Pylint W0603).
 _PKG_SUBCOMMANDS_HOLDER: list[dict[str, type[SubcommandInterface]] | None] = [None]
-_PROJECT_PACKAGE_ACTIONS = frozenset({'add', 'info', 'remove', 'search', 'upgrade'})
+_PROJECT_PACKAGE_ACTIONS = frozenset({'add', 'info', 'prune', 'remove', 'search', 'upgrade'})
 _PKG_SUBCOMMAND_ALIASES = {'add': ['install'], 'info': ['policy'], 'remove': ['rm']}
 
 
@@ -59,7 +59,7 @@ class Pkg(SubcommandInterface):
         """Longer help text shown for `collider pkg --help`."""
         del cls
         return (
-            'Manage project dependencies (add/remove/search/upgrade/info) '
+            'Manage project dependencies (add/remove/prune/search/upgrade/info) '
             'for the current Meson project.'
         )
 

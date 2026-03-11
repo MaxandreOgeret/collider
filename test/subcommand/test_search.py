@@ -175,3 +175,62 @@ def test_search_execute_repo_not_found(mock_context, caplog):
     # Following KISS, let's assume it logs a warning and returns an error code if none found
     assert exit_code != os.EX_OK
     assert 'Not all specified repositories exist. Missing: "nonexistent"' in caplog.text
+
+
+def test_search_cache_only_skips_invalid_versions_when_filtering(tmp_path: Path, caplog):
+    """Cache search skips invalid versions when a version filter is applied."""
+    cache = WrapCache(tmp_path / 'cache')
+
+    config = MagicMock()
+    config.repositories = {}
+    context = MagicMock(spec=Context)
+    context.config = config
+    context.cache = cache
+
+    args = argparse.Namespace(
+        pattern='demo',
+        repository=None,
+        version=SpecifierSet('>=1.0.0'),
+        cache=True,
+    )
+    search_cmd = Search(args, context)
+
+    with (
+        patch.object(
+            cache,
+            'list_cached_wraps',
+            return_value=[('demo', 'not-a-version'), ('demo', '1.0.0')],
+        ),
+        patch.object(cache, 'has_package', return_value=True),
+    ):
+        exit_code = search_cmd.execute()
+
+    assert exit_code == os.EX_OK
+    assert 'Skipping cached wrap "demo" with invalid version "not-a-version".' in caplog.text
+    assert 'demo (1.0.0) [cached]' in caplog.text
+
+
+def test_search_cache_only_sorts_results_by_name_then_version(tmp_path: Path, caplog):
+    """Cache-only results are rendered in deterministic name/version order."""
+    config = MagicMock()
+    config.repositories = {}
+    context = MagicMock(spec=Context)
+    context.config = config
+    context.cache = MagicMock(spec=WrapCache)
+    context.cache.list_cached_wraps.return_value = [
+        ('beta', '1.0.0'),
+        ('alpha', '2.0.0'),
+        ('alpha', '1.0.0'),
+    ]
+    context.cache.has_package.return_value = True
+
+    args = argparse.Namespace(pattern='.*', repository=None, version=None, cache=True)
+    search_cmd = Search(args, context)
+
+    exit_code = search_cmd.execute()
+
+    assert exit_code == os.EX_OK
+    alpha_1 = caplog.text.index('alpha (1.0.0) [cached]')
+    alpha_2 = caplog.text.index('alpha (2.0.0) [cached]')
+    beta = caplog.text.index('beta (1.0.0) [cached]')
+    assert alpha_1 < alpha_2 < beta

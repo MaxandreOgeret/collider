@@ -21,7 +21,7 @@ def _make_context() -> Context:
 
 
 def test_pkg_register_creates_subparsers() -> None:
-    """Pkg.register() adds add/search/remove/upgrade/info subparsers."""
+    """Pkg.register() adds add/search/remove/prune/upgrade/info subparsers."""
     parser = argparse.ArgumentParser()
     Pkg.register(parser)
 
@@ -63,6 +63,16 @@ def test_pkg_register_creates_subparsers() -> None:
     assert args.pkg_action == 'remove'
     assert args.package == 'my-package'
 
+    args = parser.parse_args(['prune'])
+    assert args.pkg_subcommand == 'prune'
+    assert args.pkg_action == 'prune'
+    assert args.dry_run is False
+
+    args = parser.parse_args(['prune', '--dry-run'])
+    assert args.pkg_subcommand == 'prune'
+    assert args.pkg_action == 'prune'
+    assert args.dry_run is True
+
     args = parser.parse_args(['upgrade'])
     assert args.pkg_subcommand == 'upgrade'
     assert args.pkg_action == 'upgrade'
@@ -98,3 +108,8 @@ def test_pkg_cli_dispatch() -> None:
     """Full CLI collider pkg add <name> dispatches to Add and returns its exit code."""
     exit_code = run_subcommand(Subcommand.PKG, ['add', 'some-package'])
     assert exit_code == os.EX_NOINPUT
+
+
+def test_pkg_long_help_mentions_prune() -> None:
+    """The pkg help text includes the prune subcommand."""
+    assert 'prune' in Pkg.long_help()

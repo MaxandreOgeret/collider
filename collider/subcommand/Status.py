@@ -23,6 +23,7 @@ from collider.utils.packaging.resolver import (
     build_dep_name_index,
     resolve_all_dependencies,
 )
+from collider.utils.project_state import scan_wraps
 
 
 class Status(SubcommandInterface):
@@ -72,7 +73,7 @@ class Status(SubcommandInterface):
         ]
 
         subprojects_dir = Path.cwd() / SUBPROJECTS_DIR
-        wrap_names = self._scan_wraps(subprojects_dir)
+        wrap_names = scan_wraps(subprojects_dir)
         tracked_names = {dep.name for dep in tracked}
 
         lockfile_path = Path.cwd() / Lockfile.get_filename()
@@ -175,12 +176,6 @@ class Status(SubcommandInterface):
             return {name: candidate.version for name, candidate in resolution.mapping.items()}
         except Exception:
             return {}
-
-    @staticmethod
-    def _scan_wraps(subprojects_dir: Path) -> list[str]:
-        if not subprojects_dir.exists():
-            return []
-        return [path.stem for path in subprojects_dir.glob('*.wrap') if path.is_file()]
 
     @staticmethod
     def _report_lock_drift(lockfile: Lockfile, subprojects_dir: Path) -> None:

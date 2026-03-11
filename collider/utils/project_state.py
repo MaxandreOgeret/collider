@@ -77,13 +77,24 @@ def remove_installed_artifacts(package_name: str) -> bool:
     return removed_any
 
 
+def scan_wraps(subprojects_dir: Path) -> list[str]:
+    """Return stem names of all .wrap files in subprojects/."""
+    if not subprojects_dir.exists():
+        return []
+    return [p.stem for p in subprojects_dir.glob('*.wrap') if p.is_file()]
+
+
 def warn_if_lockfile_needs_refresh(package_name: str) -> None:
     """Warn when collider.lock still contains state for a changed package."""
     lockfile_path = Path.cwd() / Lockfile.get_filename()
     if not lockfile_path.exists():
         return
 
-    lockfile = Lockfile.from_path(lockfile_path)
+    try:
+        lockfile = Lockfile.from_path(lockfile_path)
+    except Exception:
+        return
+
     if package_name in lockfile.all_packages:
         logger.warning(
             f'collider.lock was not updated for "{package_name}"; '

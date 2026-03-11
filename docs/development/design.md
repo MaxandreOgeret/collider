@@ -190,13 +190,15 @@ Searches configured repositories by name and optional version constraint.
 - Populates `subprojects/packagecache/` to support offline builds.
 - Resolves and installs transitive dependencies (see [Transitive Dependency Resolution](#transitive-dependency-resolution)).
 - Adds the direct dependency to `collider.json` if not already present.
+- If the wrap is already installed only as a transitive dependency, promotes it into `collider.json` without reinstalling it.
 - Persists the requested version constraint in `collider.json` when `--version` is used.
 - Leaves `collider.lock` unchanged; lockfile writes are explicit via `collider lock`.
 
 ### `pkg remove`
 
 - Removes a collider-managed dependency from `collider.json`.
-- Deletes the package's installed wrap from `subprojects/`.
+- Deletes the package's installed wrap from `subprojects/` only when Collider can prove it is no longer needed.
+- If the package is still needed transitively, or Collider cannot determine that safely, leaves the installed wrap in place.
 - Leaves `collider.lock` unchanged; warns if the package is still locked.
 
 ### `pkg upgrade`
@@ -425,11 +427,13 @@ If transitive resolution fails after the direct package has been installed, `pkg
 
 ### Reinstall Guard
 
-`pkg add` checks whether a `.wrap` file already exists for the requested package before performing any repository or network operations. If the wrap is present, the command exits immediately with an error and suggests `--force`. When `--force` is passed, existing artifacts (wrap file and subproject directory) are removed before proceeding with a fresh install.
+`pkg add` checks whether a `.wrap` file already exists for the requested package before performing any repository or network operations. If the wrap is present and the package is not already declared directly, Collider first checks whether it is an installed transitive dependency. In that case, the command adds it to `collider.json` without reinstalling it. Otherwise, the command exits immediately with an error and suggests `--force`. When `--force` is passed, existing artifacts (wrap file and subproject directory) are removed before proceeding with a fresh install.
 
-### Transitive Cleanup on Remove
+### Transitive Cleanup: Remove vs Prune
 
-`pkg rm` removes the direct package and then determines which remaining wraps are orphaned. Only wraps listed in `collider.lock` are considered for cleanup; manually placed wraps are never removed. When a lockfile exists, it re-resolves the remaining direct dependencies from `collider.json` to build the set of still-needed packages. Wraps in `subprojects/` that are not in that set and are in the lockfile are removed automatically. If a transitive dep is shared with another direct dependency, it is kept. When no lockfile exists or resolution is not possible (no repository with `dependency_names` metadata), a warning is logged and manual cleanup is left to the user.
+`pkg remove` is conservative: it always deletes the direct dependency from `collider.json`, but it only removes the installed wrap/subproject directory when Collider can prove the package is no longer needed. If another direct dependency still requires it transitively, or if re-resolution fails and Collider cannot determine safety, the installed wrap is left in place. This guarantees that manually placed wraps and potentially shared dependencies are never accidentally deleted.
+
+Transitive cleanup is handled by a separate `pkg prune` command (also invoked via `pkg remove --prune`). Prune requires a lockfile for provenance — `collider.lock` defines which wraps are Collider-managed. Without a lockfile, prune warns and does nothing. When a lockfile is present, prune loads the managed package set, re-resolves all remaining `collider.json` dependencies to compute the "needed" set, and removes wraps that are managed but no longer needed. If a transitive dep is shared with another direct dependency, it is kept. Wraps not listed in the lockfile (manually placed) are never removed. A `--dry-run` flag allows previewing removals without deleting. Prune resolves conservatively: unlike install, lock, and status, it always includes conditional dependencies and never excludes optional ones, because the safety requirement is to never delete a wrap that might still be needed. Successful prune operations do not rewrite `collider.lock`; instead they warn that the lockfile should be refreshed with `collider lock`.
 
 ### Offline Transitive Resolution
 
