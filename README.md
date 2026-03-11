@@ -113,6 +113,7 @@ collider pkg add my-lib --version '>=1.2,<2.0'
 collider pkg add my-lib --offline
 collider pkg upgrade my-lib
 collider pkg remove my-lib
+collider pkg prune
 ```
 
 5) Create or refresh the lockfile when you want reproducible installs:
@@ -239,11 +240,19 @@ some `pkg` commands use `-v` for version constraints.
   Add a package dependency to the project and install it into `subprojects/`.
   When `--version` is provided, Collider resolves only matching versions and persists that constraint in `collider.json`.
   If the package is already declared in `collider.json` with a version constraint, that constraint is enforced automatically.
+  If the wrap is already installed only as a transitive dependency, Collider promotes it into `collider.json` without reinstalling it.
   This command does not create or update `collider.lock`; use `collider lock` explicitly.
 
 - `collider pkg remove <name>` or `collider pkg rm <name>`  
-  Remove a collider-managed dependency from `collider.json` and delete its installed wrap state from `subprojects/`.
+  Remove a collider-managed dependency from `collider.json`.
+  Collider removes the installed wrap state only when it can prove the package is no longer needed; otherwise it leaves the wrap in place and warns or explains why.
+  Use `--prune` to also remove orphaned transitive dependencies.
   This command does not create or update `collider.lock`; if the package is still present in the lockfile, Collider warns to run `collider lock`.
+
+- `collider pkg prune [--dry-run]`  
+  Remove orphaned Collider-managed transitive wraps that are no longer needed by any declared dependency.
+  Requires `collider.lock` for provenance; without a lockfile, warns and does nothing. Use `--dry-run` to preview removals.
+  This command does not update `collider.lock`; after deletions, Collider warns to run `collider lock`.
 
 - `collider pkg search <pattern> [--cache] [--repository NAME] ... [--version SPEC]`  
   Search repositories or the local cache.

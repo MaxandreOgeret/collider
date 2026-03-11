@@ -10,13 +10,16 @@ Collider resolves the newest version across all configured repositories,
 installs the wrap file into `subprojects/`, and populates
 `subprojects/packagecache/` so Meson can build offline.
 
-If the package is already installed (a `.wrap` file exists in `subprojects/`),
-Collider exits with an error rather than redoing work. Pass `--force` to
-reinstall:
+If the package is already installed and already declared directly, Collider
+exits with an error rather than redoing work. Pass `--force` to reinstall:
 
 ```bash
 collider pkg add <name> --force
 ```
+
+If the wrap is already present only because it was installed transitively for
+another dependency, `pkg add` promotes it into `collider.json` as a direct
+dependency without reinstalling it.
 
 Collider also resolves **transitive dependencies** automatically. When the
 added package depends on other packages (detected via
@@ -100,20 +103,47 @@ archives. See [Offline Mode](offline-mode.md) for details.
 collider pkg remove <name>
 ```
 
-This removes the dependency from `collider.json` and deletes the installed wrap
-from `subprojects/`. The alias `pkg rm` also works.
+This removes the dependency from `collider.json`. The alias `pkg rm` also
+works.
 
-When `collider.lock` exists, Collider also removes orphaned transitive
-dependencies that are no longer needed by any remaining direct dependency.
-Only wraps listed in the lockfile are considered for removal; manually added
-wraps in `subprojects/` are never touched. If another direct dependency still
-requires a shared transitive, it is kept. When no lockfile exists or the
-resolver cannot determine which wraps are orphaned (e.g. no repository with
-dependency metadata is configured), a warning is shown and manual cleanup is
-left to the user.
+`pkg remove` is conservative about installed artifacts. If another dependency
+still requires the package transitively, Collider keeps the wrap in place. If
+Collider cannot determine safely whether the package is still needed, it also
+leaves the wrap in place and warns instead of deleting it.
 
 If the package is still present in `collider.lock`, Collider warns you to run
 `collider lock` to update the lockfile.
+
+To also clean up orphaned transitive dependencies in one step, use:
+
+```bash
+collider pkg remove --prune <name>
+```
+
+## Pruning Orphaned Dependencies
+
+```bash
+collider pkg prune
+```
+
+`pkg prune` scans `subprojects/` for transitive wraps that are no longer
+needed by any declared Collider dependency and removes them. Only wraps proven
+to be Collider-managed (listed in `collider.lock`) are eligible; manually
+placed wraps are never touched.
+
+If no lockfile exists, `prune` warns and does nothing. Running `collider lock`
+creates ownership metadata for future operations, but existing leftover wraps
+may still need to be removed manually.
+
+Pruning does not update `collider.lock`; after wraps are removed, Collider
+warns you to run `collider lock` to refresh the lockfile.
+
+Use `--dry-run` to preview what would be removed without actually deleting
+anything:
+
+```bash
+collider pkg prune --dry-run
+```
 
 ## Upgrading Packages
 

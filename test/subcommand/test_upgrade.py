@@ -317,3 +317,249 @@ def test_upgrade_does_not_warn_when_lockfile_already_matches(
         os.chdir(cwd)
 
     assert 'run "collider lock" to refresh it' not in caplog.text
+
+
+def test_upgrade_offline_uses_cached_wrap(tmp_path: Path, monkeypatch) -> None:
+    """Offline upgrade succeeds when the target wrap is already cached."""
+    _init_project(
+        tmp_path,
+        [Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+    content = b'cached-payload'
+    package = _make_package('shared', '2.0.0', content)
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.requires_network.return_value = True
+    context = _make_context(tmp_path, repo)
+    context.cache.store_wrap(package)
+    context.cache.archives_dir.mkdir(parents=True, exist_ok=True)
+    (context.cache.archives_dir / f'{package.source_hash}-pkg.tar.xz').write_bytes(content)
+
+    repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
+    entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+
+    cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=True), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Upgrade.search_packages',
+            return_value={'repo1': {repo_key: entry}},
+        ):
+            assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert (tmp_path / 'subprojects' / 'shared.wrap').exists()
+
+
+def test_upgrade_offline_missing_cache_fails(tmp_path: Path) -> None:
+    """Offline upgrade fails when the requested wrap is not cached."""
+    _init_project(
+        tmp_path,
+        [Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.requires_network.return_value = True
+    context = _make_context(tmp_path, repo)
+
+    repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
+    entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
+    cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=True), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Upgrade.search_packages',
+            return_value={'repo1': {repo_key: entry}},
+        ):
+            assert cmd.execute() == os.EX_IOERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_upgrade_skips_invalid_versions(tmp_path: Path, monkeypatch) -> None:
+    """Upgrade ignores invalid candidate versions and uses the newest valid one."""
+    _init_project(
+        tmp_path,
+        [Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+    content = b'payload'
+    package = _make_package('shared', '2.0.0', content)
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = package
+    context = _make_context(tmp_path, repo)
+
+    bad_key = make_repo_key('shared', 'bad-version', PackageType.WRAP)
+    good_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Upgrade.search_packages',
+            return_value={
+                'repo1': {
+                    bad_key: RepoPackageEntry('shared', 'bad-version', PackageType.WRAP),
+                    good_key: RepoPackageEntry('shared', '2.0.0', PackageType.WRAP),
+                }
+            },
+        ):
+            assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert (tmp_path / 'subprojects' / 'shared.wrap').read_text(
+        encoding='utf-8'
+    ) == package.wrap_text
+
+
+def test_upgrade_fetch_failure_returns_ioerr(tmp_path: Path) -> None:
+    """Upgrade fails cleanly when fetching the selected package fails."""
+    _init_project(
+        tmp_path,
+        [Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = None
+    context = _make_context(tmp_path, repo)
+
+    repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
+    entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
+    cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Upgrade.search_packages',
+            return_value={'repo1': {repo_key: entry}},
+        ):
+            assert cmd.execute() == os.EX_IOERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_upgrade_fails_when_installing_downloaded_package_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Upgrade surfaces package installation failures as IO errors."""
+    _init_project(
+        tmp_path,
+        [Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+
+    content = b'payload'
+    package = _make_package('shared', '2.0.0', content)
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = package
+    context = _make_context(tmp_path, repo)
+
+    repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
+    entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with (
+            patch(
+                'collider.subcommand.pkg.Upgrade.search_packages',
+                return_value={'repo1': {repo_key: entry}},
+            ),
+            patch.object(
+                WrapPackage,
+                'install_to_subproject',
+                side_effect=FileExistsError('already exists'),
+            ),
+        ):
+            assert cmd.execute() == os.EX_IOERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_upgrade_all_stops_after_first_failure(tmp_path: Path) -> None:
+    """Upgrade-all stops at the first failing package and leaves later packages untouched."""
+    _init_project(
+        tmp_path,
+        [
+            Dependency('alpha', DependencySource.COLLIDER, None),
+            Dependency('beta', DependencySource.COLLIDER, None),
+        ],
+    )
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = None
+    context = _make_context(tmp_path, repo)
+
+    def search_side_effect(_repos, pattern, version_spec):
+        del version_spec
+        name = pattern.pattern.strip('^$')
+        return {
+            'repo1': {
+                make_repo_key(name, '1.0.0', PackageType.WRAP): RepoPackageEntry(
+                    name, '1.0.0', PackageType.WRAP
+                )
+            }
+        }
+
+    cmd = Upgrade(argparse.Namespace(package=None, version=None, offline=False), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Upgrade.search_packages',
+            side_effect=search_side_effect,
+        ) as search:
+            assert cmd.execute() == os.EX_IOERR
+            assert search.call_count == 1
+    finally:
+        os.chdir(cwd)
+
+    assert not (tmp_path / 'subprojects' / 'beta.wrap').exists()
+
+
+def test_upgrade_ignores_corrupt_lockfile_warning_check(
+    tmp_path: Path, monkeypatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Upgrade still succeeds when collider.lock exists but is unreadable."""
+    _init_project(
+        tmp_path,
+        [Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+    (tmp_path / Lockfile.get_filename()).write_text('not-json{{', encoding='utf-8')
+
+    content = b'payload'
+    package = _make_package('shared', '2.0.0', content)
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = package
+    context = _make_context(tmp_path, repo)
+
+    repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
+    entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Upgrade.search_packages',
+            return_value={'repo1': {repo_key: entry}},
+        ):
+            assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert (tmp_path / 'subprojects' / 'shared.wrap').exists()
+    assert 'Invalid JSON' in caplog.text

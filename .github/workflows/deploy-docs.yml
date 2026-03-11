@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ github.actor != 'nektos/act' }}
     runs-on: ubuntu-latest
     environment: web-deploy
     permissions:

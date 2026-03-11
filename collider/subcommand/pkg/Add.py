@@ -30,13 +30,14 @@ from collider.repository.implementation.RepositoryInterface import RepositoryInt
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.meson import SUBPROJECTS_DIR
-from collider.utils.meson.project import validate_meson_project_cwd
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 from collider.utils.packaging.resolver import (
     ResolutionSummary,
+    RootSpec,
     build_dep_name_index,
+    resolve_all_dependencies,
     resolve_dependencies,
 )
 from collider.utils.packaging.types import RepoKey
@@ -138,14 +139,44 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
         :return: Exit code.
         """
         logger.debug(f'Installing package "{self.package_name}" in "{Path.cwd().as_posix()}".')
-        if not validate_meson_project_cwd():
+        if not Path.cwd().joinpath('meson.build').exists():
+            logger.critical('No meson.build file found in current directory.')
             return os.EX_NOINPUT
 
         colliderfile_path = Path.cwd().joinpath(Colliderfile.get_filename())
-        colliderfile = Colliderfile.from_path(colliderfile_path)
+        if colliderfile_path.exists():
+            if colliderfile_path.is_dir():
+                logger.critical('collider.json exists but is a directory.')
+                return os.EX_DATAERR
+            colliderfile = Colliderfile.from_path(colliderfile_path)
+        else:
+            colliderfile = Colliderfile()
+            colliderfile.save(colliderfile_path)
+            logger.info('Created collider.json.')
+        version_spec_str = self._resolve_version_specifier_text(colliderfile)
 
         wrap_path = Path.cwd() / SUBPROJECTS_DIR / f'{self.package_name}.wrap'
         if wrap_path.exists() and not self.force:
+            already_declared = any(
+                dep.name == self.package_name and dep.source == DependencySource.COLLIDER
+                for dep in colliderfile.dependencies
+            )
+            if not already_declared and self._is_existing_wrap_transitive(colliderfile):
+                logger.info(
+                    f'Package "{self.package_name}" is already installed; '
+                    'adding it to collider.json as a direct dependency.'
+                )
+                self._add_dependency(
+                    colliderfile,
+                    RepoPackageEntry(self.package_name, '', PackageType.WRAP),
+                    version_spec_str,
+                )
+                if Path.cwd().joinpath(Lockfile.get_filename()).exists():
+                    logger.warning(
+                        f'collider.lock was not updated for "{self.package_name}"; '
+                        'run "collider lock" to refresh it.'
+                    )
+                return os.EX_OK
             logger.error(f'Package "{self.package_name}" is already installed.')
             logger.info('Use --force to reinstall.')
             return os.EX_DATAERR
@@ -153,7 +184,6 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
         if self.force:
             remove_installed_artifacts(self.package_name)
 
-        version_spec_str = self._resolve_version_specifier_text(colliderfile)
         try:
             version_spec = self.version_spec or (
                 SpecifierSet(version_spec_str) if version_spec_str is not None else None
@@ -195,6 +225,64 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
         self._add_dependency(colliderfile, newest_entry, version_spec_str)
         self._warn_if_lockfile_stale(newest_entry, package)
         return os.EX_OK
+
+    def _is_existing_wrap_transitive(self, colliderfile: Colliderfile) -> bool:
+        """
+        Determine whether an installed wrap is already required transitively.
+
+        :param colliderfile: Current project dependency declarations.
+        :return: True if the package is known to be transitive, False otherwise.
+        """
+        lockfile_path = Path.cwd() / Lockfile.get_filename()
+        if lockfile_path.exists():
+            try:
+                lockfile = Lockfile.from_path(lockfile_path)
+                if self.package_name in lockfile.packages:
+                    return True
+            except Exception:
+                pass
+
+        direct_deps = [
+            dep
+            for dep in colliderfile.dependencies
+            if dep.source == DependencySource.COLLIDER and dep.name != self.package_name
+        ]
+        if not direct_deps:
+            return False
+
+        repos = dict(self.context.config.repositories.items())
+        dep_name_index = build_dep_name_index(repos)
+        if not dep_name_index:
+            return False
+
+        root_specs = [
+            RootSpec(
+                name=dep.name,
+                version_spec=dep.version,
+                include_names=set(dep.include) if dep.include else None,
+                exclude_names=set(dep.exclude) if dep.exclude else None,
+            )
+            for dep in direct_deps
+        ]
+
+        try:
+            resolution = resolve_all_dependencies(
+                roots=root_specs,
+                repos=repos,
+                offline=bool(self.offline),
+                wrap_cache=self.context.cache,
+                include_conditional=True,
+                exclude_optional=False,
+            )
+        except (
+            resolvelib.RequirementsConflicted,
+            resolvelib.ResolutionImpossible,
+            resolvelib.ResolutionTooDeep,
+            Exception,
+        ):
+            return False
+
+        return self.package_name in resolution.mapping
 
     def _find_newest_package(
         self,

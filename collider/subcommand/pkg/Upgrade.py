@@ -282,7 +282,10 @@ class Upgrade(SubcommandInterface):
         if not lockfile_path.exists():
             return
 
-        lockfile = Lockfile.from_path(lockfile_path)
+        try:
+            lockfile = Lockfile.from_path(lockfile_path)
+        except Exception:
+            return
         locked = lockfile.all_packages.get(entry.name)
         actual_hash = compute_wrap_hash(package.wrap_text)
 

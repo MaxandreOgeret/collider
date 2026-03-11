@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import resolvelib
 
 from collider.cache import WrapCache
 from collider.Context import Context
@@ -171,6 +172,59 @@ def test_transitive_add_resolves_transitive_deps(tmp_path: Path, monkeypatch) ->
     dep_names = [d.name for d in colliderfile.dependencies]
     assert 'grpc' in dep_names
     assert 'abseil-cpp' not in dep_names
+
+
+def test_add_creates_colliderfile_when_missing(tmp_path: Path, monkeypatch) -> None:
+    """pkg add bootstraps collider.json if the project has not been initialized yet."""
+    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
+
+    grpc_pkg, grpc_content = _make_package('grpc', '1.59.1')
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = grpc_pkg
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    monkeypatch.setattr(
+        urllib.request,
+        'urlopen',
+        lambda url, **kwargs: _DummyResponse(grpc_content),
+    )
+
+    args = argparse.Namespace(
+        package='grpc',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with (
+            patch('collider.subcommand.pkg.Add.search_packages') as mock_search,
+            patch(
+                'collider.subcommand.pkg.Add.resolve_dependencies',
+                return_value=_make_resolution_result(
+                    {'grpc': Candidate('grpc', '1.59.1', 'repo1')}
+                ),
+            ),
+            patch('collider.subcommand.pkg.Add.build_dep_name_index', return_value={}),
+        ):
+            grpc_key = make_repo_key('grpc', '1.59.1', PackageType.WRAP)
+            grpc_entry = RepoPackageEntry('grpc', '1.59.1', PackageType.WRAP)
+            mock_search.return_value = {'repo1': {grpc_key: grpc_entry}}
+            assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    colliderfile = Colliderfile.from_path(tmp_path / Colliderfile.get_filename())
+    assert [dep.name for dep in colliderfile.dependencies] == ['grpc']
 
 
 def test_transitive_add_skips_system_deps(
@@ -583,8 +637,11 @@ def test_add_already_installed_errors(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """pkg add exits with EX_DATAERR when the package wrap already exists."""
-    _init_project(tmp_path)
+    """pkg add exits with EX_DATAERR when the direct package is already declared and installed."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('grpc', DependencySource.COLLIDER, None)],
+    )
     subprojects = tmp_path / 'subprojects'
     subprojects.mkdir(exist_ok=True)
     (subprojects / 'grpc.wrap').write_text('[wrap-file]\n')
@@ -609,7 +666,22 @@ def test_add_already_installed_errors(
     cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        result = cmd.execute()
+        with (
+            patch(
+                'collider.subcommand.pkg.Add.build_dep_name_index',
+                return_value={'protobuf_dep': 'protobuf'},
+            ),
+            patch(
+                'collider.subcommand.pkg.Add.resolve_all_dependencies',
+                return_value=_make_resolution_result(
+                    {
+                        'grpc': Candidate('grpc', '1.59.1-1', 'repo1'),
+                        'protobuf': Candidate('protobuf', '25.2-4', 'repo1'),
+                    }
+                ),
+            ),
+        ):
+            result = cmd.execute()
     finally:
         os.chdir(cwd)
 
@@ -617,6 +689,66 @@ def test_add_already_installed_errors(
     repo.get_package.assert_not_called()
     assert 'already installed' in caplog.text
     assert '--force' in caplog.text
+
+
+def test_add_already_installed_transitive_becomes_direct_dependency(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """pkg add promotes an installed transitive wrap into collider.json without reinstalling."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('grpc', DependencySource.COLLIDER, None)],
+    )
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir(exist_ok=True)
+    (subprojects / 'protobuf.wrap').write_text('[wrap-file]\n')
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repos = {'repo1': repo}
+    context = _make_context(tmp_path, repos)
+
+    args = argparse.Namespace(
+        package='protobuf',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with (
+            patch(
+                'collider.subcommand.pkg.Add.build_dep_name_index',
+                return_value={'protobuf_dep': 'protobuf'},
+            ),
+            patch(
+                'collider.subcommand.pkg.Add.resolve_all_dependencies',
+                return_value=_make_resolution_result(
+                    {
+                        'grpc': Candidate('grpc', '1.59.1-1', 'repo1'),
+                        'protobuf': Candidate('protobuf', '25.2-4', 'repo1'),
+                    }
+                ),
+            ),
+        ):
+            result = cmd.execute()
+    finally:
+        os.chdir(cwd)
+
+    assert result == os.EX_OK
+    repo.get_package.assert_not_called()
+    colliderfile = Colliderfile.from_path(tmp_path / Colliderfile.get_filename())
+    dep_names = [dep.name for dep in colliderfile.dependencies]
+    assert dep_names == ['grpc', 'protobuf']
+    assert 'already installed; adding it to collider.json as a direct dependency' in caplog.text
 
 
 def test_add_force_reinstalls(tmp_path: Path, monkeypatch) -> None:
@@ -1104,3 +1236,331 @@ def test_add_persists_exclude_optional_flag(tmp_path: Path, monkeypatch) -> None
     dep = next(d for d in colliderfile.dependencies if d.name == 'grpc')
     assert dep.exclude_optional is True
     assert dep.include_conditional is None
+
+
+def test_add_existing_wrap_with_unreadable_lockfile_and_resolution_failure_errors(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An existing wrap is not promoted when transitive ownership cannot be proven."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('grpc', DependencySource.COLLIDER, None)],
+    )
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+    (subprojects / 'protobuf.wrap').write_text('[wrap-file]\n', encoding='utf-8')
+    (tmp_path / 'collider.lock').write_text('not-json{{', encoding='utf-8')
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    context = _make_context(tmp_path, {'repo1': repo})
+    cmd = Add(
+        argparse.Namespace(
+            package='protobuf',
+            offline=False,
+            version=None,
+            include=None,
+            exclude=None,
+            include_conditional=False,
+            exclude_optional=False,
+            force=False,
+        ),
+        context,
+    )
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with (
+            patch(
+                'collider.subcommand.pkg.Add.build_dep_name_index',
+                return_value={'protobuf_dep': 'protobuf'},
+            ),
+            patch(
+                'collider.subcommand.pkg.Add.resolve_all_dependencies',
+                side_effect=resolvelib.ResolutionImpossible([Requirement('protobuf')]),
+            ),
+        ):
+            assert cmd.execute() == os.EX_DATAERR
+    finally:
+        os.chdir(cwd)
+
+    colliderfile = Colliderfile.from_path(tmp_path / Colliderfile.get_filename())
+    assert [dep.name for dep in colliderfile.dependencies] == ['grpc']
+    assert 'Package "protobuf" is already installed.' in caplog.text
+
+
+def test_add_existing_wrap_with_no_dependency_index_errors(tmp_path: Path) -> None:
+    """An existing wrap is rejected when Collider cannot resolve remaining direct deps."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('grpc', DependencySource.COLLIDER, None)],
+    )
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+    (subprojects / 'protobuf.wrap').write_text('[wrap-file]\n', encoding='utf-8')
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    context = _make_context(tmp_path, {'repo1': repo})
+    cmd = Add(
+        argparse.Namespace(
+            package='protobuf',
+            offline=False,
+            version=None,
+            include=None,
+            exclude=None,
+            include_conditional=False,
+            exclude_optional=False,
+            force=False,
+        ),
+        context,
+    )
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch('collider.subcommand.pkg.Add.build_dep_name_index', return_value={}):
+            assert cmd.execute() == os.EX_DATAERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_add_skips_invalid_versions_when_selecting_newest(tmp_path: Path, monkeypatch) -> None:
+    """Invalid repository versions are skipped when choosing a package to install."""
+    _init_project(tmp_path)
+
+    package, content = _make_package('demo', '2.0.0')
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = package
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    args = argparse.Namespace(
+        package='demo',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    bad_key = make_repo_key('demo', 'not-a-version', PackageType.WRAP)
+    good_key = make_repo_key('demo', '2.0.0', PackageType.WRAP)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **kwargs: _DummyResponse(content))
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with (
+            patch(
+                'collider.subcommand.pkg.Add.search_packages',
+                return_value={
+                    'repo1': {
+                        bad_key: RepoPackageEntry('demo', 'not-a-version', PackageType.WRAP),
+                        good_key: RepoPackageEntry('demo', '2.0.0', PackageType.WRAP),
+                    }
+                },
+            ),
+            patch('collider.subcommand.pkg.Add.build_dep_name_index', return_value={}),
+        ):
+            assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert (tmp_path / 'subprojects' / 'demo.wrap').exists()
+
+
+def test_add_offline_missing_cache_returns_ioerr(tmp_path: Path) -> None:
+    """Offline add fails cleanly when the selected package is not cached."""
+    _init_project(tmp_path)
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = True
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    args = argparse.Namespace(
+        package='demo',
+        offline=True,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    demo_key = make_repo_key('demo', '1.0.0', PackageType.WRAP)
+    demo_entry = RepoPackageEntry('demo', '1.0.0', PackageType.WRAP)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Add.search_packages',
+            return_value={'repo1': {demo_key: demo_entry}},
+        ):
+            assert cmd.execute() == os.EX_IOERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_add_rejects_unsupported_package_type(tmp_path: Path) -> None:
+    """Add fails when a repository returns a non-wrap package object."""
+    _init_project(tmp_path)
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = object()
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    args = argparse.Namespace(
+        package='demo',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    demo_key = make_repo_key('demo', '1.0.0', PackageType.WRAP)
+    demo_entry = RepoPackageEntry('demo', '1.0.0', PackageType.WRAP)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Add.search_packages',
+            return_value={'repo1': {demo_key: demo_entry}},
+        ):
+            assert cmd.execute() == os.EX_IOERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_add_fails_when_subproject_directory_exists(tmp_path: Path, monkeypatch) -> None:
+    """Add refuses to install over an existing subproject directory."""
+    _init_project(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    (subprojects / 'demo').mkdir(parents=True)
+
+    package, content = _make_package('demo', '1.0.0')
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = package
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    args = argparse.Namespace(
+        package='demo',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    demo_key = make_repo_key('demo', '1.0.0', PackageType.WRAP)
+    demo_entry = RepoPackageEntry('demo', '1.0.0', PackageType.WRAP)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **kwargs: _DummyResponse(content))
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Add.search_packages',
+            return_value={'repo1': {demo_key: demo_entry}},
+        ):
+            assert cmd.execute() == os.EX_IOERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_add_partial_transitive_failure_leaves_installed_transitives_in_place(
+    tmp_path: Path, monkeypatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A partial transitive failure rolls back the direct package but keeps already-installed transitives."""
+    _init_project(tmp_path)
+
+    root_pkg, root_content = _make_package('grpc', '1.59.1')
+    ok_pkg, ok_content = _make_package('abseil-cpp', '20240722.0')
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+
+    def get_package(repo_key):
+        if 'grpc' in repo_key:
+            return root_pkg
+        if 'abseil-cpp' in repo_key:
+            return ok_pkg
+        return None
+
+    repo.get_package.side_effect = get_package
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    resolved_mapping = {
+        'grpc': Candidate('grpc', '1.59.1', 'repo1'),
+        'abseil-cpp': Candidate('abseil-cpp', '20240722.0', 'repo1'),
+        'missing': Candidate('missing', '1.0.0', 'missing-repo'),
+    }
+
+    monkeypatch.setattr(
+        urllib.request,
+        'urlopen',
+        lambda url, **kwargs: _DummyResponse(
+            root_content if 'grpc' in url else ok_content if 'abseil' in url else b''
+        ),
+    )
+
+    cmd = Add(
+        argparse.Namespace(
+            package='grpc',
+            offline=False,
+            version=None,
+            include=None,
+            exclude=None,
+            include_conditional=False,
+            exclude_optional=False,
+            force=False,
+        ),
+        context,
+    )
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with (
+            patch('collider.subcommand.pkg.Add.search_packages') as mock_search,
+            patch(
+                'collider.subcommand.pkg.Add.resolve_dependencies',
+                return_value=_make_resolution_result(resolved_mapping),
+            ),
+            patch(
+                'collider.subcommand.pkg.Add.build_dep_name_index',
+                return_value={'absl_base': 'abseil-cpp'},
+            ),
+        ):
+            grpc_key = make_repo_key('grpc', '1.59.1', PackageType.WRAP)
+            grpc_entry = RepoPackageEntry('grpc', '1.59.1', PackageType.WRAP)
+            mock_search.return_value = {'repo1': {grpc_key: grpc_entry}}
+            assert cmd.execute() == os.EX_IOERR
+    finally:
+        os.chdir(cwd)
+
+    assert not (tmp_path / 'subprojects' / 'grpc.wrap').exists()
+    assert (tmp_path / 'subprojects' / 'abseil-cpp.wrap').exists()
+    assert 'Failed to install transitive dependencies: missing.' in caplog.text
