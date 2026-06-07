@@ -3,6 +3,7 @@
 
 """WrapDB-compatible remote repository."""
 
+import hashlib
 import json
 import time
 import urllib.parse
@@ -34,6 +35,20 @@ def _wrap_releases_to_packages(
 ) -> dict[RepoKey, RepoPackageEntry]:
     """Convert WrapDB releases to an in-memory package index."""
     return packages_from_releases(wrap_releases)
+
+
+def _releases_cache_path(cache_path: Path, url: urllib.parse.ParseResult) -> Path:
+    """
+    Derive a collision-free cache file path for a repository's releases.json.
+
+    Keying on the full URL (not just the host) prevents repositories that share
+    a host but differ by path from clobbering or stale-serving each other.
+    :param cache_path: Cache root directory.
+    :param url: Effective repository URL the releases were fetched from.
+    :return: Path to the cached releases.json for this repository.
+    """
+    digest = hashlib.sha256(url.geturl().encode('utf-8')).hexdigest()[:16]
+    return Path(cache_path) / 'wrapdb' / f'{url.netloc}-{digest}' / _RELEASES_FILENAME
 
 
 def _ensure_v2_url(url: urllib.parse.ParseResult) -> urllib.parse.ParseResult:
@@ -81,7 +96,7 @@ class Wrap(RepositoryInterface):
         releases_url = urllib.parse.urljoin(effective_url.geturl(), _RELEASES_FILENAME)
         cache_file: Optional[Path] = None
         if cache_path is not None:
-            cache_file = Path(cache_path) / 'wrapdb' / url.netloc / _RELEASES_FILENAME
+            cache_file = _releases_cache_path(cache_path, effective_url)
 
         releases: dict[str, WrapDbReleasesEntry]
         if offline:

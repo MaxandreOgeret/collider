@@ -15,11 +15,18 @@ from collider.repository.entries import RepoPackageEntry
 from collider.repository.implementation.Wrap import (
     _RELEASES_TTL_SECONDS,
     Wrap,
+    _ensure_v2_url,
     _get_pkg_wrap_url,
+    _releases_cache_path,
     _wrap_releases_to_packages,
 )
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
+
+
+def _cache_file_for(cache_path, url_str: str):
+    """Resolve the releases.json cache path the way production code does."""
+    return _releases_cache_path(cache_path, _ensure_v2_url(urllib.parse.urlparse(url_str)))
 
 
 class _DummyResponse:
@@ -183,13 +190,36 @@ def test_wrap_get_package_parses_wrap(monkeypatch):
 
 def test_wrap_from_url_offline_uses_cache(tmp_path):
     cache_path = tmp_path / 'cache'
-    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps({'foo': {'versions': ['1.0.0']}}), encoding='utf-8')
 
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
     repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
     assert repo_key in repo.packages
+
+
+def test_wrap_releases_cache_isolates_same_host_different_path(tmp_path):
+    """Repositories sharing a host but differing by path must not share a cache file."""
+    cache_path = tmp_path / 'cache'
+    url_a = 'https://packages.example.com/team-a/v2/'
+    url_b = 'https://packages.example.com/team-b/v2/'
+
+    cache_a = _cache_file_for(cache_path, url_a)
+    cache_b = _cache_file_for(cache_path, url_b)
+    assert cache_a != cache_b
+
+    cache_a.parent.mkdir(parents=True, exist_ok=True)
+    cache_b.parent.mkdir(parents=True, exist_ok=True)
+    cache_a.write_text(json.dumps({'a': {'versions': ['1.0.0']}}), encoding='utf-8')
+    cache_b.write_text(json.dumps({'b': {'versions': ['2.0.0']}}), encoding='utf-8')
+
+    repo_a = Wrap.from_url(url_a, cache_path=cache_path, offline=True)
+    repo_b = Wrap.from_url(url_b, cache_path=cache_path, offline=True)
+
+    assert make_repo_key('a', '1.0.0', PackageType.WRAP) in repo_a.packages
+    assert make_repo_key('b', '2.0.0', PackageType.WRAP) in repo_b.packages
+    assert make_repo_key('b', '2.0.0', PackageType.WRAP) not in repo_a.packages
 
 
 def test_wrap_from_url_offline_requires_cache(tmp_path):
@@ -200,7 +230,7 @@ def test_wrap_from_url_offline_requires_cache(tmp_path):
 def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
     """Cached releases.json within TTL skips the HTTP fetch entirely."""
     cache_path = tmp_path / 'cache'
-    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps({'foo': {'versions': ['1.0.0']}}), encoding='utf-8')
 
@@ -221,7 +251,7 @@ def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
 def test_wrap_from_url_fetches_when_ttl_expired(tmp_path, monkeypatch):
     """Stale cached releases.json (past TTL) triggers a fresh HTTP fetch."""
     cache_path = tmp_path / 'cache'
-    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps({'old': {'versions': ['0.1.0']}}), encoding='utf-8')
 
@@ -254,7 +284,7 @@ def test_wrap_from_url_fetches_when_no_cache(tmp_path, monkeypatch):
 def test_wrap_from_url_ttl_not_checked_in_offline_mode(tmp_path, monkeypatch):
     """Offline mode always uses cache regardless of age -- no TTL check."""
     cache_path = tmp_path / 'cache'
-    cache_file = cache_path / 'wrapdb' / 'wrapdb.mesonbuild.com' / 'releases.json'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps({'stale': {'versions': ['0.1.0']}}), encoding='utf-8')
 
