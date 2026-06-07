@@ -17,7 +17,7 @@ from collider.log import logger
 from collider.utils import command
 
 
-_MINIMUM_VERSION = Version('1.8.1')
+_MINIMUM_VERSION = Version('1.8.5')
 DEFAULT_BUILD_DIR = Path('collider-build')
 SUBPROJECTS_DIR = Path('subprojects')
 
