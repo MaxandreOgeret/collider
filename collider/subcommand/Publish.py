@@ -202,7 +202,11 @@ class Publish(SubcommandInterface):
                 rel = Path(*rel.parts[1:])
             if not rel.parts:
                 return tarinfo
-            if rel.parts[0] in exclude_names:
+            # Match at any depth so nested VCS/cache directories are excluded too.
+            if any(part in exclude_names for part in rel.parts):
+                return None
+            # Drop Meson's downloaded archive cache; it bundles other packages' sources.
+            if rel.parts[:2] == ('subprojects', 'packagecache'):
                 return None
             if build_rel and tuple(rel.parts[: len(build_rel)]) == build_rel:
                 return None
