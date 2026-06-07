@@ -6,6 +6,7 @@ import configparser
 import json
 import os
 import socket
+import tarfile
 import threading
 import urllib.parse
 
@@ -164,6 +165,53 @@ def test_push_generates_wrap_and_archive(tmp_path: Path) -> None:
     assert wrap_section['source_hash'] == compute_file_hash(archive_path)
 
     assert wrap_parser['provide']['my-lib'] == 'my_lib_dep'
+
+
+def test_push_archive_excludes_artifacts_but_keeps_wraps(tmp_path: Path) -> None:
+    """Published source archive drops nested junk and packagecache, keeps subproject wraps."""
+    repo_path = tmp_path / 'repo'
+    repo_path.mkdir()
+    repo = Filesystem(repo_path, publish_url='https://packages.example.com/collider/')
+
+    config = MagicMock()
+    config.repositories = {'local': repo}
+    context = MagicMock(spec=Context)
+    context.config = config
+
+    source_dir = tmp_path / 'src'
+    (source_dir / 'src').mkdir(parents=True)
+    (source_dir / 'meson.build').write_text("project('demo', 'c')", encoding='utf-8')
+    (source_dir / 'src' / 'lib.c').write_text('int answer(void) { return 42; }', encoding='utf-8')
+
+    # Build artifacts and VCS noise that must never reach the published archive.
+    (source_dir / '.git').mkdir()
+    (source_dir / '.git' / 'config').write_text('[core]', encoding='utf-8')
+    (source_dir / 'src' / '__pycache__').mkdir()
+    (source_dir / 'src' / '__pycache__' / 'cached.pyc').write_text('x', encoding='utf-8')
+
+    # subprojects/: wraps are real source, packagecache is a build artifact.
+    (source_dir / 'subprojects').mkdir()
+    (source_dir / 'subprojects' / 'fmt.wrap').write_text('[wrap-file]', encoding='utf-8')
+    (source_dir / 'subprojects' / 'packagecache').mkdir()
+    (source_dir / 'subprojects' / 'packagecache' / 'fmt.tar.xz').write_bytes(b'archive')
+
+    builddir = tmp_path / 'build'
+    _write_projectinfo(builddir, name='demo', version='1.0.0')
+    _write_mesoninfo(builddir, source_dir)
+
+    cmd = Publish(_push_args(repository='local', builddir=builddir), context)
+    assert cmd.execute() == os.EX_OK
+
+    archive_path = repo_path / repo.ARCHIVE_DIR / 'demo_1.0.0' / 'demo-1.0.0.tar.xz'
+    with tarfile.open(archive_path) as tar:
+        members = {Path(name).relative_to('demo-1.0.0').as_posix() for name in tar.getnames()}
+
+    assert 'meson.build' in members
+    assert 'src/lib.c' in members
+    assert 'subprojects/fmt.wrap' in members
+    assert not any(m == '.git' or m.startswith('.git/') for m in members)
+    assert not any('__pycache__' in Path(m).parts for m in members)
+    assert not any(m.startswith('subprojects/packagecache') for m in members)
 
 
 def test_push_missing_repository(tmp_path: Path) -> None:
