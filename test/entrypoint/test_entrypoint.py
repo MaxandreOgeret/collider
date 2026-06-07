@@ -2,6 +2,7 @@
 # Copyright (c) 2026 MOG Robotics OÜ.
 
 import logging
+import os
 import subprocess
 import sys
 
@@ -12,6 +13,7 @@ import pytest
 
 from collider.entrypoint import _get_installed_version, entrypoint, error_handler
 from collider.log import Level, logger
+from collider.utils import meson
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -152,3 +154,22 @@ def test_entrypoint_unhandled_exception_exits_nonzero() -> None:
         with pytest.raises(SystemExit) as exc:
             entrypoint()
     assert exc.value.code == 1
+
+
+def test_entrypoint_meson_unavailable_returns_ex_unavailable(monkeypatch, caplog) -> None:
+    """Missing/outdated Meson exits with EX_UNAVAILABLE, not the internal-bug handler."""
+
+    def _raise_unavailable() -> None:
+        raise meson.MesonUnavailableError('Could not locate "meson" executable.')
+
+    monkeypatch.setattr(meson, 'validate', _raise_unavailable)
+    monkeypatch.setattr(sys, 'argv', ['collider', 'setup'])
+
+    with caplog.at_level(logging.CRITICAL, logger='collider'):
+        with pytest.raises(SystemExit) as exc:
+            entrypoint()
+
+    assert exc.value.code == os.EX_UNAVAILABLE
+    # The generic "this is a bug" handler must not fire for an environment problem.
+    assert 'Oi oi oi' not in caplog.text
+    assert 'probably a bug' not in caplog.text
