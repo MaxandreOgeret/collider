@@ -436,6 +436,76 @@ def test_push_collider_repo_http_unreachable_endpoint(tmp_path: Path) -> None:
         assert cmd.execute() == os.EX_IOERR
 
 
+def test_push_filesystem_repo_duplicate_version_returns_ex_cantcreat(
+    tmp_path: Path, caplog
+) -> None:
+    """Publishing the same name/version twice returns EX_CANTCREAT with a clear message."""
+    repo_path = tmp_path / 'repo'
+    repo_path.mkdir()
+    repo = Filesystem(repo_path, publish_url='https://packages.example.com/collider/')
+
+    config = MagicMock()
+    config.repositories = {'local': repo}
+    context = MagicMock(spec=Context)
+    context.config = config
+
+    source_dir = tmp_path / 'src'
+    source_dir.mkdir()
+    (source_dir / 'meson.build').write_text("project('my-lib', 'c')", encoding='utf-8')
+    builddir = tmp_path / 'build'
+    _write_projectinfo(builddir, name='my-lib', version='1.0.0')
+    _write_mesoninfo(builddir, source_dir)
+
+    args = _push_args(repository='local', builddir=builddir)
+    assert Publish(args, context).execute() == os.EX_OK
+
+    result = Publish(args, context).execute()
+    assert result == os.EX_CANTCREAT
+    assert '1.0.0' in caplog.text
+    assert 'my-lib' in caplog.text
+    assert 'local' in caplog.text
+    assert 'Unpublish' in caplog.text
+    assert 'Failed to add package to repository' not in caplog.text
+
+
+def test_push_collider_repo_http_conflict_returns_ex_cantcreat(tmp_path: Path, caplog) -> None:
+    """Publishing a version that already exists on a remote collider repo returns EX_CANTCREAT."""
+    repo_path = tmp_path / 'repo'
+    repo_path.mkdir()
+    fs_repo = Filesystem(repo_path, publish_url='https://packages.example.com/collider/')
+    server, thread, base_url = _start_push_server(fs_repo, token='secret')
+    try:
+        source_dir = tmp_path / 'src'
+        source_dir.mkdir()
+        (source_dir / 'meson.build').write_text("project('demo', 'c')", encoding='utf-8')
+        builddir = tmp_path / 'build'
+        _write_projectinfo(builddir, name='demo', version='2.0.0')
+        _write_mesoninfo(builddir, source_dir)
+
+        collider_repo = Collider(urllib.parse.urlparse(f'{base_url}/v2/'), {})
+        config = MagicMock()
+        config.repositories = {'remote': collider_repo}
+        context = MagicMock(spec=Context)
+        context.config = config
+
+        args = _push_args(repository='remote', builddir=builddir)
+        with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
+            assert Publish(args, context).execute() == os.EX_OK
+
+        with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
+            result = Publish(args, context).execute()
+        assert result == os.EX_CANTCREAT
+        assert '2.0.0' in caplog.text
+        assert 'demo' in caplog.text
+        assert 'remote' in caplog.text
+        assert 'Unpublish' in caplog.text
+        assert 'Failed to add package to repository' not in caplog.text
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_push_collider_repo_http_unexpected_status(tmp_path: Path) -> None:
     source_dir = tmp_path / 'src'
     source_dir.mkdir()

@@ -24,6 +24,7 @@ from collider.log import logger
 from collider.Package import WrapPackage
 from collider.repository.implementation.Collider import Collider
 from collider.repository.implementation.Filesystem import Filesystem
+from collider.repository.implementation.RepositoryInterface import PackageAlreadyExistsError
 from collider.repository.implementation.Wrap import Wrap
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
@@ -160,6 +161,13 @@ class Publish(SubcommandInterface):
                     package, source_archive, self.patch_archive
                 )
                 self._push_remote_wrap_repo(repo, push_token, payload)
+        except PackageAlreadyExistsError:
+            logger.critical(
+                f'Version "{version}" of "{package_name}" already exists in repository '
+                f'"{self.repository_name}". Unpublish the existing version first, or bump '
+                'the project version.'
+            )
+            return os.EX_CANTCREAT
         except Exception as e:
             logger.critical(f'Failed to add package to repository: {e}')
             return os.EX_IOERR
@@ -335,6 +343,10 @@ class Publish(SubcommandInterface):
                     )
         except urllib.error.HTTPError as exc:
             response_body = exc.read().decode('utf-8', errors='replace')
+            if exc.code == 409:
+                raise PackageAlreadyExistsError(
+                    f'Remote push failed with HTTP 409: {response_body}'
+                ) from exc
             raise ValueError(f'Remote push failed with HTTP {exc.code}: {response_body}') from exc
         except urllib.error.URLError as exc:
             raise ValueError(f'Failed to reach remote push endpoint "{endpoint}": {exc}') from exc

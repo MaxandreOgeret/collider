@@ -31,6 +31,7 @@ from collider.Context import Context
 from collider.log import logger
 from collider.Package import WrapPackage
 from collider.repository.implementation.Filesystem import Filesystem
+from collider.repository.implementation.RepositoryInterface import PackageAlreadyExistsError
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.packaging.PackageType import PackageType
@@ -215,12 +216,11 @@ class WrapApiHandler(SimpleHTTPRequestHandler):
                     source_archive=source_archive,
                     patch_archive=patch_archive,
                 )
+        except PackageAlreadyExistsError as exc:
+            self._send_json(409, {'error': str(exc)})
+            return
         except ValueError as exc:
-            message = str(exc)
-            if 'already exists in repository' in message:
-                self._send_json(409, {'error': message})
-                return
-            self._send_json(400, {'error': message})
+            self._send_json(400, {'error': str(exc)})
             return
         except RuntimeError as exc:
             self._send_json(413, {'error': str(exc)})

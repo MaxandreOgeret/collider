@@ -19,6 +19,10 @@ from collider.utils.packaging.repo_key import make_repo_key, parse_repo_key
 from collider.utils.packaging.types import RepoKey
 
 
+class PackageAlreadyExistsError(ValueError):
+    """Raised when a package/version pair is already present in the repository."""
+
+
 class RepositoryInterface(ABC):
     """Shared repository API so callers are backend-agnostic."""
 
@@ -72,7 +76,7 @@ class RepositoryInterface(ABC):
         """Add a package and persist repository state in one step."""
         repo_key = self._make_repo_key(package.name, package.version)
         if repo_key in self.packages:
-            raise ValueError(f'Package {repo_key} already exists in repository.')
+            raise PackageAlreadyExistsError(f'Package {repo_key} already exists in repository.')
 
         entry = self._add_package_impl(
             package,
