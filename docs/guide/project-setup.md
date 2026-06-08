@@ -11,6 +11,14 @@ collider init
 This creates a `collider.json` file with an empty dependency list. Collider
 refuses to initialize outside a Meson project.
 
+If your `meson.build` `project()` call has no `license:` field, `collider init`
+emits a warning at setup time, because a missing license causes warnings on
+every `collider publish`. Add it now to avoid the noise later:
+
+```meson
+project('mylib', 'cpp', version: '1.0.0', license: 'MIT')
+```
+
 ## The `collider.json` File
 
 `collider.json` lives at the root of your Meson project, next to `meson.build`.
