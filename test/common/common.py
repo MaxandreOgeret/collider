@@ -16,6 +16,7 @@ class Subcommand(str, Enum):
     REPO = 'repo'
     PUBLISH = 'publish'
     UNPUBLISH = 'unpublish'
+    CHECK = 'check'
 
 
 def run_subcommand(subcommand: Subcommand, args: list[str], verbose: bool = True) -> int:
