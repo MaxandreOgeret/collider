@@ -29,6 +29,7 @@ nav = [
     { "Locking and Installing" = "guide/locking-and-installing.md" },
     { "Offline Mode" = "guide/offline-mode.md" },
     { "Serving Repositories" = "guide/serving.md" },
+    { "Checking for Drift" = "guide/checking.md" },
   ] },
   { Reference = [
     { CLI = "reference/cli.md" },

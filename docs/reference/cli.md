@@ -300,6 +300,30 @@ Does not update `collider.lock`.
 
 ---
 
+## `check`
+
+Detect drift between `meson.build` dependency() calls and `collider.json`.
+
+```bash
+collider check [--sourcedir PATH] [--include-conditional]
+```
+
+| Option                  | Description                                                       |
+|-------------------------|-------------------------------------------------------------------|
+| `--sourcedir PATH`      | Meson source directory (default: current directory).              |
+| `--include-conditional` | Also check dependencies inside Meson `if`-blocks.                 |
+
+Reports **untracked** dependencies (called in `meson.build` but not in `collider.json`) and
+**stale** entries (in `collider.json` but absent from `meson.build`). Exits `0` when clean,
+non-zero on drift. Suitable for CI use.
+
+!!! note
+    Assumes the `dependency()` name in `meson.build` matches the collider package name.
+    Packages where the Meson dep name differs from the package name (e.g. `abseil-cpp` vs `absl_strings`)
+    may produce false positives.
+
+---
+
 ## `status`
 
 Show collider-managed dependencies and local wrap status.
