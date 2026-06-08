@@ -36,6 +36,38 @@ Use `--push-token-env` to read the token from a different variable:
 collider publish my-collider --push-token-env MY_TOKEN
 ```
 
+## Dry Run
+
+Use `--dry-run` to validate and package a release without writing anything to
+the repository:
+
+```bash
+collider publish <repo> --dry-run
+```
+
+Collider runs all validation steps, builds the source archive, and prints a
+summary of what would be published. No files are written and no network
+requests are made. The push token is not required in dry-run mode.
+
+```
+[dry-run] Would publish: my-lib 1.0.0
+[dry-run] Archive: my-lib-1.0.0.tar.xz (0.1 MB)
+[dry-run] Destination: my-repo (file:///path/to/repo)
+[dry-run] No files written.
+```
+
+## Duplicate Version Error
+
+If the version being published already exists in the repository, Collider exits
+with a non-zero status and suggests the available remedies:
+
+```
+CRITICAL: Version "1.0.0" of "my-lib" already exists in repository "my-repo".
+Unpublish the existing version first, or bump the project version.
+```
+
+Use `collider unpublish` to remove the existing version before re-publishing.
+
 ## The `[provide]` Section
 
 Collider auto-generates the wrap `[provide]` entry as `<name> = <name>_dep`,
@@ -68,6 +100,20 @@ Options:
 | `--no-include-uncommitted`   | Exclude working tree changes; archive only the committed diff from `--base`. |
 | `--output PATH`              | Custom output path for the patch archive.        |
 | `--list`                     | Dry-run: list files that would be included.      |
+
+#### Empty Changeset
+
+If there are no changed files (for example, `--base` points to `HEAD` with no
+local changes), `collider patch` logs a warning and exits without creating an
+archive. Use `--list` to see which files would be included before running the
+full command.
+
+#### Deleted Files
+
+Deleted files cannot be included in a Meson wrap patch because wrap patches
+cannot remove files cleanly. If the diff contains a deleted file, `collider
+patch` exits with an error. Commit the deletion upstream or use `--exclude`
+to omit it from the patch.
 
 ### 2. Publish with the Patch
 

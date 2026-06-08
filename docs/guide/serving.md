@@ -59,10 +59,24 @@ When enabled, the server exposes:
 
 Both require `Authorization: Bearer <token>`.
 
+!!! warning
+    When the push endpoint is enabled and `--host` is bound to a non-loopback
+    address, the server logs a security warning. Expose the push endpoint only
+    through a trusted reverse proxy.
+
 !!! note
     Built-in push auth is intentionally minimal (static bearer token). For
     production use, place a reverse proxy with proper authentication in front
     of the server.
+
+### `--publish-url` and pushed wraps
+
+When publishing via `collider publish`, the server rewrites archive URLs inside
+the generated wrap files using `--publish-url` as the base. If `--publish-url`
+is not set and push is enabled, Collider logs a warning and wraps will reference
+`file://` archive URLs instead. This works for local testing but is almost
+certainly wrong for any server that clients reach over the network -- always
+pass `--publish-url` in that case.
 
 ## Example Workflow
 

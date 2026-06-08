@@ -79,6 +79,12 @@ class Publish(SubcommandInterface):
             default=_DEFAULT_PUSH_TOKEN_ENV,
             help='Environment variable to read push token from for collider repositories.',
         )
+        parser.add_argument(
+            '--dry-run',
+            action='store_true',
+            default=False,
+            help='Validate and package without writing to the repository.',
+        )
 
     def __init__(self, args: argparse.Namespace, context: Context):
         """
@@ -91,13 +97,15 @@ class Publish(SubcommandInterface):
         self.builddir: Path = args.builddir
         self.patch_archive: Path | None = args.patch_archive
         self.push_token_env: str = args.push_token_env
+        self.dry_run: bool = args.dry_run
 
     @override
     def execute(self) -> int:
         """Run the publish command.
         :return: Exit code.
         """
-        logger.info(f'Publishing project to repository "{self.repository_name}".')
+        action = 'Dry run: validating' if self.dry_run else 'Publishing'
+        logger.info(f'{action} publish to repository "{self.repository_name}".')
 
         for archive_path in (self.patch_archive,):
             if archive_path is None:
@@ -139,16 +147,22 @@ class Publish(SubcommandInterface):
                     self.patch_archive,
                 )
                 package = WrapPackage.from_wrap_text(package_name, version, wrap_text)
-                repo.add_package(
-                    package,
-                    source_archive=source_archive,
-                    patch_archive=self.patch_archive,
-                )
+                if self.dry_run:
+                    self._report_dry_run(
+                        package_name,
+                        version,
+                        source_archive,
+                        self.repository_name,
+                        repo.path.as_uri(),
+                    )
+                else:
+                    repo.add_package(
+                        package,
+                        source_archive=source_archive,
+                        patch_archive=self.patch_archive,
+                    )
             else:
                 assert isinstance(repo, Collider)
-                push_token = self._load_remote_push_token()
-                if push_token is None:
-                    return os.EX_USAGE
                 wrap_text = self._build_wrap_text(
                     _REMOTE_PLACEHOLDER_BASE_URL,
                     package_name,
@@ -157,10 +171,22 @@ class Publish(SubcommandInterface):
                     self.patch_archive,
                 )
                 package = WrapPackage.from_wrap_text(package_name, version, wrap_text)
-                payload = self._build_remote_push_payload(
-                    package, source_archive, self.patch_archive
-                )
-                self._push_remote_wrap_repo(repo, push_token, payload)
+                if self.dry_run:
+                    self._report_dry_run(
+                        package_name,
+                        version,
+                        source_archive,
+                        self.repository_name,
+                        repo.url.geturl(),
+                    )
+                else:
+                    push_token = self._load_remote_push_token()
+                    if push_token is None:
+                        return os.EX_USAGE
+                    payload = self._build_remote_push_payload(
+                        package, source_archive, self.patch_archive
+                    )
+                    self._push_remote_wrap_repo(repo, push_token, payload)
         except PackageAlreadyExistsError:
             logger.critical(
                 f'Version "{version}" of "{package_name}" already exists in repository '
@@ -175,8 +201,25 @@ class Publish(SubcommandInterface):
             if temp_archive is not None:
                 temp_archive.cleanup()
 
-        logger.info(f'Package "{package.name}" published successfully.')
+        if not self.dry_run:
+            logger.info(f'Package "{package.name}" published successfully.')
         return os.EX_OK
+
+    @staticmethod
+    def _report_dry_run(name: str, version: str, archive: Path, repo_name: str, dest: str) -> None:
+        """
+        Log a dry-run summary without writing anything.
+        :param name: Package name.
+        :param version: Package version.
+        :param archive: Path to the built source archive.
+        :param repo_name: Name of the target repository.
+        :param dest: URL or path of the target repository.
+        """
+        size_mb = archive.stat().st_size / 1_048_576
+        logger.info(f'[dry-run] Would publish: {name} {version}')
+        logger.info(f'[dry-run] Archive: {archive.name} ({size_mb:.1f} MB)')
+        logger.info(f'[dry-run] Destination: {repo_name} ({dest})')
+        logger.info('[dry-run] No files written.')
 
     def _build_source_archive(
         self, source_dir: Path, name: str, version: str
