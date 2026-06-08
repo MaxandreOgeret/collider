@@ -101,6 +101,20 @@ Options:
 | `--output PATH`              | Custom output path for the patch archive.        |
 | `--list`                     | Dry-run: list files that would be included.      |
 
+#### Empty Changeset
+
+If there are no changed files (for example, `--base` points to `HEAD` with no
+local changes), `collider patch` logs a warning and exits without creating an
+archive. Use `--list` to see which files would be included before running the
+full command.
+
+#### Deleted Files
+
+Deleted files cannot be included in a Meson wrap patch because wrap patches
+cannot remove files cleanly. If the diff contains a deleted file, `collider
+patch` exits with an error. Commit the deletion upstream or use `--exclude`
+to omit it from the patch.
+
 ### 2. Publish with the Patch
 
 Revert the source tree to the unmodified upstream, then publish:
