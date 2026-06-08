@@ -92,12 +92,14 @@ def _push_args(
     builddir: Path,
     patch_archive: Path | None = None,
     push_token_env: str = 'COLLIDER_PUSH_TOKEN',
+    dry_run: bool = False,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         repository=repository,
         builddir=builddir,
         patch_archive=patch_archive,
         push_token_env=push_token_env,
+        dry_run=dry_run,
     )
 
 
@@ -542,3 +544,70 @@ def test_push_collider_repo_http_unexpected_status(tmp_path: Path) -> None:
         thread.join(timeout=2)
 
     assert request_paths == ['/v2/_collider/v1/push']
+
+
+def test_dry_run_filesystem_repo_does_not_write(tmp_path: Path, caplog) -> None:
+    """--dry-run logs a summary and does not write anything to a filesystem repository."""
+    repo_path = tmp_path / 'repo'
+    repo_path.mkdir()
+    repo = Filesystem(repo_path, publish_url='https://packages.example.com/collider/')
+
+    config = MagicMock()
+    config.repositories = {'local': repo}
+    context = MagicMock(spec=Context)
+    context.config = config
+
+    source_dir = tmp_path / 'src'
+    source_dir.mkdir()
+    (source_dir / 'meson.build').write_text("project('my-lib', 'c')", encoding='utf-8')
+    builddir = tmp_path / 'build'
+    _write_projectinfo(builddir, name='my-lib', version='1.0.0')
+    _write_mesoninfo(builddir, source_dir)
+
+    result = Publish(
+        _push_args(repository='local', builddir=builddir, dry_run=True), context
+    ).execute()
+
+    assert result == os.EX_OK
+    assert not (repo_path / 'my-lib_1.0.0').exists()
+    assert '[dry-run] Would publish: my-lib 1.0.0' in caplog.text
+    assert '[dry-run] Archive:' in caplog.text
+    assert '[dry-run] Destination: local' in caplog.text
+    assert '[dry-run] No files written.' in caplog.text
+    assert 'published successfully' not in caplog.text
+
+
+def test_dry_run_collider_repo_does_not_push(tmp_path: Path, caplog) -> None:
+    """--dry-run logs a summary and does not push to a collider repository (no token needed)."""
+    repo_path = tmp_path / 'repo'
+    repo_path.mkdir()
+    fs_repo = Filesystem(repo_path, publish_url='https://packages.example.com/collider/')
+    server, thread, base_url = _start_push_server(fs_repo, token='secret')
+    try:
+        source_dir = tmp_path / 'src'
+        source_dir.mkdir()
+        (source_dir / 'meson.build').write_text("project('demo', 'c')", encoding='utf-8')
+        builddir = tmp_path / 'build'
+        _write_projectinfo(builddir, name='demo', version='3.0.0')
+        _write_mesoninfo(builddir, source_dir)
+
+        collider_repo = Collider(urllib.parse.urlparse(f'{base_url}/v2/'), {})
+        config = MagicMock()
+        config.repositories = {'remote': collider_repo}
+        context = MagicMock(spec=Context)
+        context.config = config
+
+        # No token in environment -- dry-run must not require one.
+        with patch.dict(os.environ, {}, clear=True):
+            result = Publish(
+                _push_args(repository='remote', builddir=builddir, dry_run=True), context
+            ).execute()
+        assert result == os.EX_OK
+        assert not (repo_path / 'demo_3.0.0').exists()
+        assert '[dry-run] Would publish: demo 3.0.0' in caplog.text
+        assert '[dry-run] No files written.' in caplog.text
+        assert 'published successfully' not in caplog.text
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
