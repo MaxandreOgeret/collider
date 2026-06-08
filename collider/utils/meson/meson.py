@@ -17,23 +17,26 @@ from collider.log import logger
 from collider.utils import command
 
 
-_MINIMUM_VERSION = Version('1.8.1')
+_MINIMUM_VERSION = Version('1.8.5')
 DEFAULT_BUILD_DIR = Path('collider-build')
 SUBPROJECTS_DIR = Path('subprojects')
+
+
+class MesonUnavailableError(Exception):
+    """Raised when Meson is missing or too old: a user environment problem, not a Collider bug."""
 
 
 def validate() -> None:
     """
     Fail fast when Meson is missing or too old to avoid cryptic build errors.
-    :raises FileNotFoundError: When the meson executable is not found.
-    :raises RuntimeError: When the Meson version is below the minimum required.
+    :raises MesonUnavailableError: When the meson executable is missing or below the minimum version.
     """
 
     try:
         version = command.run(['meson', '--version'], capture=command.StdStream.STDOUT)
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         logger.critical('Could not locate "meson" executable.')
-        raise
+        raise MesonUnavailableError('Could not locate "meson" executable.') from exc
 
     assert version is not None
     if Version(version) < _MINIMUM_VERSION:
@@ -43,7 +46,7 @@ def validate() -> None:
                 f'"{_MINIMUM_VERSION}", current version is "{version}".'
             )
         )
-        raise RuntimeError(msg)
+        raise MesonUnavailableError(msg)
 
     logger.info(
         f'Using meson version: "{version}".',

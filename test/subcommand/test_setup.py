@@ -10,7 +10,22 @@ from pathlib import Path
 
 import pytest
 
+from collider.utils import meson
 from test.common.common import Subcommand, run_subcommand
+
+
+def test_setup_meson_unavailable_returns_ex_unavailable(tmp_path: Path, monkeypatch) -> None:
+    """`collider setup` returns EX_UNAVAILABLE when Meson is missing or too old."""
+
+    def _raise_unavailable() -> None:
+        raise meson.MesonUnavailableError('Could not locate "meson" executable.')
+
+    monkeypatch.setattr(meson, 'validate', _raise_unavailable)
+
+    assert (
+        run_subcommand(Subcommand.SETUP, ['--builddir', str(tmp_path / 'build')])
+        == os.EX_UNAVAILABLE
+    )
 
 
 def test_execute_success(meson_project: Path, tmp_path: Path) -> None:

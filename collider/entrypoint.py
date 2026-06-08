@@ -6,6 +6,7 @@
 import argparse
 import importlib
 import importlib.metadata
+import os
 import sys
 import traceback
 
@@ -19,6 +20,7 @@ from collider import config
 from collider.Context import Context
 from collider.log import Level, configure_logging, logger
 from collider.utils import core
+from collider.utils.meson.meson import MesonUnavailableError
 
 
 _DIST_NAME = 'collider-wraps'
@@ -144,7 +146,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    return args.func(args)
+    try:
+        return args.func(args)
+    except MesonUnavailableError:
+        # A missing or outdated Meson is a user environment problem, not a Collider bug,
+        # so report a clean exit code instead of routing it through error_handler.
+        return os.EX_UNAVAILABLE
 
 
 def entrypoint() -> None:

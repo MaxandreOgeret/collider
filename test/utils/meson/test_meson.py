@@ -30,7 +30,7 @@ def test_validate_no_meson(monkeypatch, caplog):
 
     monkeypatch.setattr(meson.command, 'run', fake_run)
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(meson.MesonUnavailableError):
         meson.validate()
 
     assert 'Could not locate "meson" executable.' in caplog.text
@@ -44,7 +44,7 @@ def test_validate_version_too_low(monkeypatch, caplog):
 
     monkeypatch.setattr(meson.command, 'run', fake_run)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(meson.MesonUnavailableError):
         meson.validate()
 
     assert 'requires meson version' in caplog.text
