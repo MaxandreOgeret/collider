@@ -36,6 +36,38 @@ Use `--push-token-env` to read the token from a different variable:
 collider publish my-collider --push-token-env MY_TOKEN
 ```
 
+## Dry Run
+
+Use `--dry-run` to validate and package a release without writing anything to
+the repository:
+
+```bash
+collider publish <repo> --dry-run
+```
+
+Collider runs all validation steps, builds the source archive, and prints a
+summary of what would be published. No files are written and no network
+requests are made. The push token is not required in dry-run mode.
+
+```
+[dry-run] Would publish: my-lib 1.0.0
+[dry-run] Archive: my-lib-1.0.0.tar.xz (0.1 MB)
+[dry-run] Destination: my-repo (file:///path/to/repo)
+[dry-run] No files written.
+```
+
+## Duplicate Version Error
+
+If the version being published already exists in the repository, Collider exits
+with a non-zero status and suggests the available remedies:
+
+```
+CRITICAL: Version "1.0.0" of "my-lib" already exists in repository "my-repo".
+Unpublish the existing version first, or bump the project version.
+```
+
+Use `collider unpublish` to remove the existing version before re-publishing.
+
 ## The `[provide]` Section
 
 Collider auto-generates the wrap `[provide]` entry as `<name> = <name>_dep`,

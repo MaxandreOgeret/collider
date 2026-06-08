@@ -112,7 +112,7 @@ Generate a wrap and source archive, then publish to a repository.
 
 ```bash
 collider publish <repo> [--builddir PATH] [--patch-archive PATH]
-                        [--push-token-env VAR]
+                        [--push-token-env VAR] [--dry-run]
 ```
 
 | Option                | Description                                              |
@@ -121,6 +121,7 @@ collider publish <repo> [--builddir PATH] [--patch-archive PATH]
 | `--builddir PATH`     | Meson build directory (default: `collider-build`).       |
 | `--patch-archive PATH`| Attach a patch archive to the published package.         |
 | `--push-token-env VAR`| Environment variable holding the bearer token (default: `COLLIDER_PUSH_TOKEN`). |
+| `--dry-run`           | Validate and package without writing to the repository.  |
 
 ---
 
