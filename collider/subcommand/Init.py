@@ -15,6 +15,7 @@ from collider.file_model.colliderfile import Colliderfile
 from collider.log import logger
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
+from collider.utils.meson.scan import scan_project_info
 
 
 class Init(SubcommandInterface):
@@ -45,6 +46,33 @@ class Init(SubcommandInterface):
         # Init has no arguments; keep a stub for CLI discovery.
         del parser
 
+    @staticmethod
+    def _log_project_info(meson_path: Path) -> None:
+        """
+        Introspect meson.build and log what was found, warning on gaps.
+        :param meson_path: Path to the meson.build file.
+        """
+        project_info = scan_project_info(meson_path)
+        if project_info is not None:
+            name = project_info.get('descriptive_name', '')
+            version = project_info.get('version', '')
+            licenses = project_info.get('license', [])
+
+            logger.info(f'Found project "{name}" in meson.build.')
+
+            if version and version != 'undefined':
+                logger.info(f'  version : {version}')
+            else:
+                logger.warning('  version is not declared in meson.build.')
+
+            license_str = ', '.join(licenses) if licenses else ''
+            if license_str and license_str != 'unknown':
+                logger.info(f'  license : {license_str}')
+            else:
+                logger.warning('  license is not declared in meson.build.')
+
+        logger.warning('  description is not in meson.build -- set it manually in collider.json.')
+
     @override
     def execute(self) -> int:
         """Run the init command.
@@ -63,6 +91,7 @@ class Init(SubcommandInterface):
                 return os.EX_DATAERR
             logger.info('collider.json already exists.')
         else:
+            self._log_project_info(meson_path)
             # collider.json is the single source of truth for managed dependencies.
             Colliderfile().save(colliderfile_path)
             logger.info('Created collider.json.')
