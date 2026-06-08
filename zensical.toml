@@ -38,6 +38,7 @@ nav = [
   ] },
   { Development = [
     { Design = "development/design.md" },
+    { Contributing = "development/contributing.md" },
   ] },
   { bBlog = ["blog/index.md"] },
 ]
