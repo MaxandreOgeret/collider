@@ -71,7 +71,7 @@ class Init(SubcommandInterface):
             else:
                 logger.warning('  license is not declared in meson.build.')
 
-        logger.warning('  description is not in meson.build -- set it manually in collider.json.')
+        logger.warning('  description: not in meson.build, set it manually in collider.json.')
 
     @override
     def execute(self) -> int:
