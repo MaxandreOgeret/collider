@@ -18,7 +18,7 @@ from collider.repository.implementation.Filesystem import Filesystem
 from collider.repository.implementation.Wrap import Wrap
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
-from collider.utils.network import DEFAULT_NETWORK_TIMEOUT
+from collider.utils.network import DEFAULT_NETWORK_TIMEOUT, safe_urlopen
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 
@@ -189,7 +189,7 @@ class Unpublish(SubcommandInterface):
         request.add_header('Authorization', f'Bearer {token}')
 
         try:
-            with urllib.request.urlopen(request, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
+            with safe_urlopen(request, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
                 if response.status in (200, 204):
                     # Keep local remote-index cache in sync after successful delete.
                     repo.packages.pop(repo_key, None)

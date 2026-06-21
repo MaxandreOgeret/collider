@@ -266,7 +266,7 @@ def test_delete_execute_collider_remote_404_returns_ex_noinput(
     cmd = Unpublish(args, context)
 
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
-        with patch('urllib.request.urlopen') as mock_urlopen:
+        with patch('collider.subcommand.Unpublish.safe_urlopen') as mock_urlopen:
             err = urllib.error.HTTPError(
                 'https://packages.example.com/v2/_collider/v1/packages/nonexistent/1.0.0',
                 404,
@@ -300,7 +300,7 @@ def test_delete_execute_collider_auth_errors_return_ex_noperm(
     cmd = Unpublish(args, context)
 
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
-        with patch('urllib.request.urlopen') as mock_urlopen:
+        with patch('collider.subcommand.Unpublish.safe_urlopen') as mock_urlopen:
             err = urllib.error.HTTPError(
                 'https://packages.example.com/v2/_collider/v1/packages/foo/1.0.0',
                 status_code,
@@ -333,7 +333,7 @@ def test_delete_execute_collider_remote_500_returns_ex_ioerr(
     cmd = Unpublish(args, context)
 
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
-        with patch('urllib.request.urlopen') as mock_urlopen:
+        with patch('collider.subcommand.Unpublish.safe_urlopen') as mock_urlopen:
             err = urllib.error.HTTPError(
                 'https://packages.example.com/v2/_collider/v1/packages/foo/1.0.0',
                 500,
@@ -424,7 +424,7 @@ def test_delete_execute_collider_url_encodes_segments() -> None:
     cmd = Unpublish(args, context)
 
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
-        with patch('urllib.request.urlopen') as mock_urlopen:
+        with patch('collider.subcommand.Unpublish.safe_urlopen') as mock_urlopen:
             response = MagicMock()
             response.__enter__.return_value = response
             response.status = 204
@@ -456,7 +456,7 @@ def test_delete_execute_collider_url_encodes_slashes_in_segments() -> None:
     cmd = Unpublish(args, context)
 
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
-        with patch('urllib.request.urlopen') as mock_urlopen:
+        with patch('collider.subcommand.Unpublish.safe_urlopen') as mock_urlopen:
             response = MagicMock()
             response.__enter__.return_value = response
             response.status = 204
@@ -490,7 +490,7 @@ def test_delete_execute_collider_unexpected_http_status_returns_ex_ioerr(
     cmd = Unpublish(args, context)
 
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
-        with patch('urllib.request.urlopen') as mock_urlopen:
+        with patch('collider.subcommand.Unpublish.safe_urlopen') as mock_urlopen:
             response = MagicMock()
             response.__enter__.return_value = response
             response.status = 202
@@ -520,7 +520,7 @@ def test_delete_execute_collider_urlerror_returns_ex_ioerr(
     cmd = Unpublish(args, context)
 
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
-        with patch('urllib.request.urlopen') as mock_urlopen:
+        with patch('collider.subcommand.Unpublish.safe_urlopen') as mock_urlopen:
             mock_urlopen.side_effect = urllib.error.URLError('Connection reset.')
             exit_code = cmd.execute()
 
