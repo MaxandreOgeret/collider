@@ -14,6 +14,7 @@ from typing import Optional
 from collider.log import logger
 from collider.Package import WrapPackage, _load_wrap_section, get_provide_names
 from collider.repository.entries import RepoPackageEntry, add_wrap_entry
+from collider.utils.fs import atomic_write_text
 from collider.utils.packaging import compute_file_hash
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.types import RepoKey
@@ -94,7 +95,7 @@ class Filesystem(RepositoryInterface):
                 patch_archive=patch_archive,
             )
 
-        dest_path.write_text(wrap_text, encoding='utf-8')
+        atomic_write_text(dest_path, wrap_text, encoding='utf-8')
 
         return RepoPackageEntry(
             name=package.name,
@@ -241,7 +242,7 @@ class Filesystem(RepositoryInterface):
 
         # Keep releases.json in sync so the repo stays WrapDB-compatible.
         releases_path = self.path / 'releases.json'
-        releases_path.write_text(json.dumps(releases, indent=2), encoding='utf-8')
+        atomic_write_text(releases_path, json.dumps(releases, indent=2), encoding='utf-8')
 
     @classmethod
     def _scan_packages(cls, repo_path: Path) -> dict[RepoKey, RepoPackageEntry]:

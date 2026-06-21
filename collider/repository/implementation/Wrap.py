@@ -16,6 +16,7 @@ from collider.log import logger
 from collider.Package import WrapPackage
 from collider.repository.entries import RepoPackageEntry, packages_from_releases
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
+from collider.utils.fs import atomic_write_text
 from collider.utils.meson.infoTypes import WrapDbReleasesEntry
 from collider.utils.network import DEFAULT_NETWORK_TIMEOUT
 from collider.utils.packaging.types import RepoKey
@@ -117,8 +118,7 @@ class Wrap(RepositoryInterface):
                 ) as response:
                     releases = json.load(response)
                 if cache_file is not None:
-                    cache_file.parent.mkdir(parents=True, exist_ok=True)
-                    cache_file.write_text(json.dumps(releases), encoding='utf-8')
+                    atomic_write_text(cache_file, json.dumps(releases), encoding='utf-8')
             except Exception as e:
                 if cache_file is None or not cache_file.exists():
                     raise e

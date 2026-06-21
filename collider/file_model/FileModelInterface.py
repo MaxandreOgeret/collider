@@ -16,6 +16,7 @@ import jsonschema
 
 from collider.log import logger
 from collider.utils.dataclass import prepare_ctor_kwargs, to_json_dict
+from collider.utils.fs import atomic_write_text
 
 
 T = TypeVar('T', bound='FileModelInterface')
@@ -128,12 +129,11 @@ class FileModelInterface(ABC):
             raise TypeError(msg)
 
         try:
-            with open(self._path.as_posix(), 'w', encoding='UTF-8') as f:
-                json.dump(self.as_dict(), f, indent=2)
+            # Serialize before touching disk so a non-serializable model fails harmlessly.
+            text = json.dumps(self.as_dict(), indent=2)
+            atomic_write_text(self._path, text)
         except (IOError, TypeError) as e:
             logger.error(f'Failed to save {self} to {self._path}: {e}')
-            if self._path.exists():
-                self._path.unlink()
             raise
 
     def validate(self) -> bool:

@@ -17,6 +17,7 @@ from typing import Optional
 
 from collider.log import logger
 from collider.Package import WrapPackage
+from collider.utils.fs import atomic_write_text
 from collider.utils.meson.scan import ScannedDependency
 from collider.utils.network import DEFAULT_NETWORK_TIMEOUT
 from collider.utils.packaging import compute_file_hash
@@ -40,7 +41,7 @@ class WrapCache:
         self.wraps_dir.mkdir(parents=True, exist_ok=True)
         wrap_path = self.wraps_dir / f'{package.name}_{package.version}.wrap'
         # Wrap cache decouples installs from repository availability.
-        wrap_path.write_text(package.wrap_text, encoding='utf-8')
+        atomic_write_text(wrap_path, package.wrap_text, encoding='utf-8')
         return wrap_path
 
     def load_wrap(self, name: str, version: str) -> Optional[WrapPackage]:
@@ -129,7 +130,7 @@ class WrapCache:
             }
             for dep in scanned
         ]
-        scan_path.write_text(json.dumps(data), encoding='utf-8')
+        atomic_write_text(scan_path, json.dumps(data), encoding='utf-8')
         return scan_path
 
     def load_scan(self, name: str, version: str) -> Optional[list[ScannedDependency]]:
