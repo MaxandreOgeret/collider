@@ -15,6 +15,7 @@ from collider.file_model.colliderfile import Colliderfile
 from collider.log import logger
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
+from collider.utils.meson.scan import scan_project_info
 
 
 class Init(SubcommandInterface):
@@ -45,6 +46,29 @@ class Init(SubcommandInterface):
         # Init has no arguments; keep a stub for CLI discovery.
         del parser
 
+    @staticmethod
+    def _hint_missing_license(meson_path: Path) -> None:
+        """
+        Emit a hint when meson.build has no license field.
+        Missing license causes publish warnings; nudging at init time avoids the
+        user discovering the gap only when they first publish.
+        :param meson_path: Path to the meson.build file.
+        """
+        project_info = scan_project_info(meson_path)
+        if project_info is None:
+            return
+        licenses = project_info.get('license', [])
+        if not licenses or licenses == ['unknown']:
+            name = project_info.get('descriptive_name', 'mylib')
+            version = project_info.get('version', '1.0.0')
+            if version == 'undefined':
+                version = '1.0.0'
+            logger.warning(
+                'meson.build has no license field. '
+                'Add one to avoid warnings at publish time. '
+                f"Example: project('{name}', 'cpp', version: '{version}', license: 'MIT')"
+            )
+
     @override
     def execute(self) -> int:
         """Run the init command.
@@ -55,6 +79,8 @@ class Init(SubcommandInterface):
         if not meson_path.exists():
             logger.critical('No meson.build file found in current directory.')
             return os.EX_DATAERR
+
+        self._hint_missing_license(meson_path)
 
         colliderfile_path = project_root / Colliderfile.get_filename()
         if colliderfile_path.exists():

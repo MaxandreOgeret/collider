@@ -47,6 +47,25 @@ def _ensure_meson_validated() -> None:
         globals()['_meson_validated'] = True
 
 
+def scan_project_info(meson_build: Path) -> Optional[dict]:
+    """
+    Run `meson introspect --projectinfo` on a meson.build file.
+    Best-effort: any failure (meson unavailable, parse error, etc.) returns None
+    so callers can degrade gracefully without special-casing every error type.
+    :param meson_build: Path to the meson.build file.
+    :return: Raw project info dict, or None on any failure.
+    """
+    try:
+        _ensure_meson_validated()
+        output = command.run(
+            ['meson', 'introspect', '--projectinfo', str(meson_build)],
+            capture=command.StdStream.STDOUT,
+        )
+        return json.loads(output) if output else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def scan_dependencies(meson_build: Path) -> list[ScannedDependency]:
     """
     Run `meson introspect --scan-dependencies` on a meson.build file.

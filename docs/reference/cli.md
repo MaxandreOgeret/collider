@@ -21,6 +21,9 @@ collider init
 
 Refuses to run outside a Meson project (no `meson.build` found).
 
+If the `meson.build` `project()` declaration has no `license:` field, a hint is
+emitted at init time to avoid discovering the gap only when publishing.
+
 ---
 
 ## `setup`
