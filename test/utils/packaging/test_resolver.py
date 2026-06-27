@@ -201,11 +201,41 @@ def test_candidate_inequality_different_version() -> None:
 
 
 def test_candidate_hash_consistent_with_equality() -> None:
-    """Equal candidates (name+version) have the same hash regardless of repo."""
+    """Equal candidates (name+version+repo) share a hash and collapse in sets."""
     c1 = Candidate('zlib', '1.3.1', 'local')
-    c2 = Candidate('zlib', '1.3.1', 'remote')
+    c2 = Candidate('zlib', '1.3.1', 'local')
     assert hash(c1) == hash(c2)
     assert len({c1, c2}) == 1
+
+
+def test_candidate_distinct_by_repo() -> None:
+    """Same name and version from different repos are distinct candidates."""
+    c1 = Candidate('zlib', '1.3.1', 'local')
+    c2 = Candidate('zlib', '1.3.1', 'remote')
+    assert c1 != c2
+    assert len({c1, c2}) == 2
+
+
+def test_candidate_incompatibility_scoped_to_repo() -> None:
+    """Marking one repo's candidate incompatible does not drop another repo's identical version."""
+    repo1 = _make_repo(_make_packages(('zlib', '1.3.1', ['zlib'])))
+    repo2 = _make_repo(_make_packages(('zlib', '1.3.1', ['zlib'])))
+    repos = {'repo1': repo1, 'repo2': repo2}
+    provider = ColliderProvider(repos, build_dep_name_index(repos))
+
+    req = Requirement('zlib')
+    bad = Candidate('zlib', '1.3.1', 'repo1')
+    identifier = provider.identify(req)
+    matches = list(
+        provider.find_matches(
+            identifier=identifier,
+            requirements={identifier: [req]},
+            incompatibilities={identifier: [bad]},
+        )
+    )
+
+    repo_names = {m.repo_name for m in matches}
+    assert repo_names == {'repo2'}
 
 
 def test_candidate_repr() -> None:
@@ -269,6 +299,27 @@ def test_provider_find_matches_returns_candidates() -> None:
     versions = [m.version for m in matches]
     assert versions[0] == '1.3.1'
     assert versions[1] == '1.2.0'
+
+
+def test_provider_find_matches_skips_unsafe_version() -> None:
+    """find_matches drops entries whose version is not a safe path segment."""
+    packages: dict = {}
+    add_wrap_entry(packages, 'foo', '../evil', None)
+    repo = _make_repo(packages)
+    repos = {'local': repo}
+    provider = ColliderProvider(repos, build_dep_name_index(repos))
+
+    req = Requirement('foo')
+    identifier = provider.identify(req)
+    matches = list(
+        provider.find_matches(
+            identifier=identifier,
+            requirements={identifier: [req]},
+            incompatibilities={identifier: []},
+        )
+    )
+
+    assert matches == []
 
 
 def test_provider_is_satisfied_by_no_constraint() -> None:
@@ -350,6 +401,61 @@ def test_provider_find_matches_filters_incompatibilities() -> None:
 
     assert len(matches) == 1
     assert matches[0].version == '1.2.0'
+
+
+def test_provider_find_matches_excludes_prerelease_when_stable_exists() -> None:
+    """A prerelease is not offered when a stable version satisfies the constraint."""
+    packages = _make_packages(
+        ('zlib', '1.3.1', ['zlib']),
+        ('zlib', '2.0.0rc1', ['zlib']),
+    )
+    repo = _make_repo(packages)
+    repos = {'local': repo}
+    provider = ColliderProvider(repos, build_dep_name_index(repos))
+
+    req = Requirement('zlib', '>=1.0')
+    identifier = provider.identify(req)
+    matches = list(
+        provider.find_matches(
+            identifier=identifier,
+            requirements={identifier: [req]},
+            incompatibilities={identifier: []},
+        )
+    )
+
+    assert [m.version for m in matches] == ['1.3.1']
+
+
+def test_provider_find_matches_falls_back_to_prerelease_when_only_option() -> None:
+    """A prerelease is offered when no stable version satisfies the constraint."""
+    packages = _make_packages(('zlib', '2.0.0rc1', ['zlib']))
+    repo = _make_repo(packages)
+    repos = {'local': repo}
+    provider = ColliderProvider(repos, build_dep_name_index(repos))
+
+    req = Requirement('zlib', '>=1.0')
+    identifier = provider.identify(req)
+    matches = list(
+        provider.find_matches(
+            identifier=identifier,
+            requirements={identifier: [req]},
+            incompatibilities={identifier: []},
+        )
+    )
+
+    assert [m.version for m in matches] == ['2.0.0rc1']
+
+
+def test_provider_is_satisfied_by_accepts_prerelease_for_stable_spec() -> None:
+    """A prerelease candidate satisfies a stable specifier; the version range still applies."""
+    packages = _make_packages(('zlib', '2.0.0rc1', ['zlib']))
+    repo = _make_repo(packages)
+    repos = {'local': repo}
+    provider = ColliderProvider(repos, build_dep_name_index(repos))
+
+    req = Requirement('zlib', '>=1.0')
+    assert provider.is_satisfied_by(req, Candidate('zlib', '2.0.0rc1', 'local')) is True
+    assert provider.is_satisfied_by(req, Candidate('zlib', '0.9.0rc1', 'local')) is False
 
 
 def test_provider_find_matches_skips_invalid_versions() -> None:

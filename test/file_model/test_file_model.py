@@ -154,6 +154,16 @@ def test_mock_file_model_as_file():
     assert json.loads(json_str) == {'name': 'test_as_file', 'version': 7}
 
 
+def test_mock_file_model_as_file_cleans_up_on_close():
+    """The backing temp file is removed when the handle is closed."""
+    model = MockFileModel(name='test_cleanup', version=8)
+    tmp_file = model.as_file()
+    path = Path(tmp_file.name)
+    assert path.exists()
+    tmp_file.close()
+    assert not path.exists()
+
+
 def test_mock_file_model_set_path_invalid():
     """Test _set_path with a directory."""
     model = MockFileModel(name='test')
@@ -249,10 +259,29 @@ def test_mock_file_model_save_io_error(tmp_path):
     file_path = tmp_path / 'io_error.json'
     model = MockFileModel(name='test', path=file_path)
 
-    # Use patch to make open raise IOError
-    with patch('builtins.open', side_effect=IOError('Simulated I/O error')):
+    # Patch the atomic write helper to surface an I/O error through save.
+    with patch(
+        'collider.file_model.FileModelInterface.atomic_write_text',
+        side_effect=IOError('Simulated I/O error'),
+    ):
         with pytest.raises(IOError, match='Simulated I/O error'):
             model.save()
+
+
+def test_mock_file_model_save_failure_preserves_existing(tmp_path):
+    """A failed save must leave a previously valid file intact."""
+    file_path = tmp_path / 'preserved.json'
+    file_path.write_text(json.dumps({'name': 'original', 'version': 1}), encoding='UTF-8')
+    model = MockFileModel(name='updated', version=2, path=file_path)
+
+    with patch(
+        'collider.file_model.FileModelInterface.atomic_write_text',
+        side_effect=IOError('disk full'),
+    ):
+        with pytest.raises(IOError):
+            model.save()
+
+    assert json.loads(file_path.read_text(encoding='UTF-8')) == {'name': 'original', 'version': 1}
 
 
 def test_file_model_as_dict_cleaning():

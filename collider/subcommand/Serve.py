@@ -34,6 +34,7 @@ from collider.repository.implementation.Filesystem import Filesystem
 from collider.repository.implementation.RepositoryInterface import PackageAlreadyExistsError
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
+from collider.utils.fs import atomic_write_text
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 
@@ -515,7 +516,7 @@ Examples:
 
         releases_path = repo_path / 'releases.json'
         if not releases_path.exists():
-            releases_path.write_text('{}\n', encoding='utf-8')
+            atomic_write_text(releases_path, '{}\n', encoding='utf-8')
 
         publish_url = self.publish_url or repo_path.as_uri()
         try:

@@ -46,6 +46,56 @@ def test_wrap_cache_store_and_load(tmp_path: Path):
     assert loaded.source_url == 'https://example.com/foo.tar.xz'
 
 
+def test_wrap_cache_store_rejects_unsafe_name(tmp_path: Path):
+    """store_wrap refuses a traversal package name instead of writing outside the cache."""
+    cache = WrapCache(tmp_path / 'cache')
+    package = WrapPackage.from_wrap_text('../evil', '1.0.0', _wrap_text('deadbeef'))
+
+    with pytest.raises(ValueError):
+        cache.store_wrap(package)
+
+    assert not (tmp_path / 'evil_1.0.0.wrap').exists()
+
+
+def test_wrap_cache_store_scan_rejects_unsafe_name(tmp_path: Path):
+    """store_scan refuses a traversal name instead of writing outside the scans dir."""
+    from collider.utils.meson.scan import ScannedDependency
+
+    cache = WrapCache(tmp_path / 'cache')
+
+    with pytest.raises(ValueError):
+        cache.store_scan('../../evil', '1.0.0', [ScannedDependency(name='zlib', required=True)])
+
+    assert not (tmp_path / 'evil_1.0.0.json').exists()
+    assert not (tmp_path.parent / 'evil_1.0.0.json').exists()
+
+
+def test_wrap_cache_load_returns_none_on_unsafe_name(tmp_path: Path):
+    """Reads treat a traversal name as a cache miss (no crash) instead of raising."""
+    cache = WrapCache(tmp_path / 'cache')
+    assert cache.load_wrap('../../evil', '1.0.0') is None
+    assert cache.load_scan('../../evil', '1.0.0') is None
+    assert cache.has_package('../../evil', '1.0.0') is False
+
+
+def test_wrap_cache_ensure_archive_rejects_unsafe_hash(tmp_path: Path):
+    """A traversal source_hash cannot make the archive path escape the cache."""
+    cache = WrapCache(tmp_path / 'cache')
+    package = WrapPackage.from_wrap_text(
+        'foo',
+        '1.0.0',
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=../../evil\n',
+    )
+
+    with pytest.raises(ValueError):
+        cache.prepare_packagecache(package, tmp_path / 'subprojects', offline=True)
+
+    assert not (tmp_path.parent / 'evil-foo.tar.xz').exists()
+
+
 def test_wrap_cache_has_package(tmp_path: Path):
     cache = WrapCache(tmp_path / 'cache')
 
@@ -61,6 +111,15 @@ def test_wrap_cache_has_package(tmp_path: Path):
     archive_path.write_bytes(content)
 
     assert cache.has_package('foo', '1.0.0') is True
+
+
+def test_wrap_cache_has_package_rejects_unsafe_hash(tmp_path: Path):
+    """has_package treats an unsafe source_hash as not cached instead of crashing."""
+    cache = WrapCache(tmp_path / 'cache')
+    package = WrapPackage.from_wrap_text('foo', '1.0.0', _wrap_text('../../evil'))
+
+    cache.store_wrap(package)
+    assert cache.has_package('foo', '1.0.0') is False
 
 
 def test_wrap_cache_prepare_packagecache_downloads(tmp_path: Path, monkeypatch):

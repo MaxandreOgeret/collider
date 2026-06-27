@@ -104,3 +104,24 @@ def test_run_command_cwd_uses_current_directory(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(target_dir)
     stdout = command.run(['pwd'], capture=StdStream.STDOUT)
     assert stdout == str(target_dir)
+
+
+def test_assert_safe_path_segment_accepts_normal_names() -> None:
+    """Ordinary package names and versions pass through unchanged."""
+    assert core.assert_safe_path_segment('abseil-cpp') == 'abseil-cpp'
+    assert core.assert_safe_path_segment('1.3.1', 'version') == '1.3.1'
+
+
+@pytest.mark.parametrize(
+    'value',
+    ['', '.', '..', '../evil', 'a/b', 'a\\b', 'foo\x00bar'],
+)
+def test_assert_safe_path_segment_rejects_unsafe(value: str) -> None:
+    """Empty, traversal, separator, and NUL values are rejected."""
+    with pytest.raises(ValueError):
+        core.assert_safe_path_segment(value)
+
+
+def test_is_safe_path_segment_rejects_empty() -> None:
+    """An empty string is reported as an unsafe path segment."""
+    assert core.is_safe_path_segment('') is False

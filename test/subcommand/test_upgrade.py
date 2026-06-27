@@ -419,6 +419,18 @@ def test_upgrade_skips_invalid_versions(tmp_path: Path, monkeypatch) -> None:
     ) == package.wrap_text
 
 
+def test_upgrade_fetch_package_rejects_unsafe_name(tmp_path: Path) -> None:
+    """_fetch_package returns None when the entry name is not a safe path segment."""
+    repo = MagicMock(spec=RepositoryInterface)
+    context = _make_context(tmp_path, repo)
+    cmd = Upgrade(argparse.Namespace(package=None, version=None, offline=False), context)
+
+    entry = RepoPackageEntry('../evil', '1.0.0', PackageType.WRAP)
+    repo_key = make_repo_key('../evil', '1.0.0', PackageType.WRAP)
+
+    assert cmd._fetch_package(entry, repo, repo_key) is None
+
+
 def test_upgrade_fetch_failure_returns_ioerr(tmp_path: Path) -> None:
     """Upgrade fails cleanly when fetching the selected package fails."""
     _init_project(

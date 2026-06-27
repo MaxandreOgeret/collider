@@ -27,6 +27,7 @@ from tqdm import tqdm
 from collider.cache import WrapCache
 from collider.log import logger
 from collider.repository import search_packages
+from collider.utils.core import assert_safe_path_segment
 from collider.utils.meson.scan import (
     ScannedDependency,
     filter_dependencies,
@@ -37,7 +38,9 @@ from collider.utils.packaging.repo_key import make_repo_key
 
 
 if TYPE_CHECKING:
+    from collider.repository.entries import RepoPackageEntry
     from collider.repository.implementation.RepositoryInterface import RepositoryInterface
+    from collider.utils.packaging.types import RepoKey
 
 
 @dataclass(frozen=True)
@@ -77,10 +80,14 @@ class Candidate:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Candidate):
             return NotImplemented
-        return self.name == other.name and self.version == other.version
+        return (
+            self.name == other.name
+            and self.version == other.version
+            and self.repo_name == other.repo_name
+        )
 
     def __hash__(self) -> int:
-        return hash((self.name, self.version))
+        return hash((self.name, self.version, self.repo_name))
 
     def __repr__(self) -> str:
         return f'Candidate({self.name!r}, {self.version!r}, {self.repo_name!r})'
@@ -168,29 +175,85 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
             re.compile(f'^{re.escape(identifier)}$'),
         )
 
+        # Prefer stable releases; only consider prereleases when nothing stable
+        # satisfies the constraints, so packages that ship only prereleases stay
+        # installable without surprising stable resolutions.
+        candidates = self._collect_matches(all_matches, reqs, bad, allow_prereleases=False)
+        if not candidates:
+            candidates = self._collect_matches(all_matches, reqs, bad, allow_prereleases=True)
+
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return [c for _, c in candidates]
+
+    @staticmethod
+    def _matches_requirements(
+        version: str, reqs: list[Requirement], allow_prereleases: bool
+    ) -> bool:
+        """
+        Check a version against every requirement's specifier.
+        :param version: Candidate version string.
+        :param reqs: Requirements that must all be satisfied.
+        :param allow_prereleases: Allow prereleases even when a specifier targets stable releases.
+        :return: True when the version satisfies all requirements.
+        """
+        # prereleases=None lets each specifier apply its own default, so explicit
+        # prerelease constraints keep working; True forces the prerelease fallback.
+        prereleases = True if allow_prereleases else None
+        return all(
+            req.version_spec is None or req.version_spec.contains(version, prereleases=prereleases)
+            for req in reqs
+        )
+
+    def _collect_matches(
+        self,
+        all_matches: Mapping[str, Mapping[RepoKey, RepoPackageEntry]],
+        reqs: list[Requirement],
+        bad: set[Candidate],
+        allow_prereleases: bool,
+    ) -> list[tuple[packaging.version.Version, Candidate]]:
+        """
+        Build the list of candidates that satisfy the requirements.
+        :param all_matches: Packages found per repository for the identifier.
+        :param reqs: Requirements every candidate must satisfy.
+        :param bad: Candidates marked incompatible by the resolver.
+        :param allow_prereleases: Whether prereleases may satisfy stable specifiers.
+        :return: List of (parsed version, candidate) tuples.
+        """
         candidates: list[tuple[packaging.version.Version, Candidate]] = []
         for repo_name, pkgs in all_matches.items():
             for _key, entry in pkgs.items():
+                try:
+                    # Names and versions from repository metadata become cache and
+                    # subproject paths downstream; never resolve unsafe segments.
+                    assert_safe_path_segment(entry.name)
+                    assert_safe_path_segment(entry.version, 'version')
+                except ValueError:
+                    logger.debug(
+                        f'Skipping package with unsafe name or version: '
+                        f'"{entry.name}" "{entry.version}".'
+                    )
+                    continue
+
                 try:
                     parsed = packaging.version.parse(entry.version)
                 except InvalidVersion:
                     continue
 
-                if any(r.version_spec and not r.version_spec.contains(entry.version) for r in reqs):
+                if not self._matches_requirements(entry.version, reqs, allow_prereleases):
                     continue
 
                 cand = Candidate(entry.name, entry.version, repo_name)
                 if cand in bad:
                     continue
                 candidates.append((parsed, cand))
-
-        candidates.sort(key=lambda x: x[0], reverse=True)
-        return [c for _, c in candidates]
+        return candidates
 
     def is_satisfied_by(self, requirement: Requirement, candidate: Candidate) -> bool:
         if requirement.version_spec is None:
             return True
-        return requirement.version_spec.contains(candidate.version)
+        # Allow prereleases here so a prerelease pin chosen by find_matches still
+        # satisfies stable specifiers; the version range itself is still enforced.
+        return requirement.version_spec.contains(candidate.version, prereleases=True)
 
     def get_dependencies(self, candidate: Candidate) -> list[Requirement]:
         """

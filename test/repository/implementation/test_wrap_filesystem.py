@@ -5,6 +5,7 @@ import hashlib
 import json
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -88,6 +89,23 @@ def test_filesystem_repo_add_get_remove(repo_path: Path):
     repo.remove_package(package)
     assert repo_key not in repo.packages
     assert not wrap_path.exists()
+
+
+def test_filesystem_write_releases_failure_preserves_existing(repo_path: Path):
+    repo = Filesystem(repo_path, publish_url=repo_path.as_uri())
+    repo.add_package(WrapPackage.from_wrap_text('foo', '1.0.0', _wrap_text()))
+
+    releases_path = repo_path / 'releases.json'
+    original = releases_path.read_text(encoding='utf-8')
+
+    with patch(
+        'collider.repository.implementation.Filesystem.atomic_write_text',
+        side_effect=IOError('disk full'),
+    ):
+        with pytest.raises(IOError):
+            repo._write_releases_json()
+
+    assert releases_path.read_text(encoding='utf-8') == original
 
 
 def test_filesystem_repo_contains(repo_path: Path):

@@ -187,6 +187,99 @@ def test_patch_deleted_file_errors(tmp_path: Path) -> None:
     assert result == os.EX_DATAERR
 
 
+def test_patch_uncommitted_uses_base_revision(tmp_path: Path) -> None:
+    """--base is honored in the default uncommitted mode, diffing against base, not HEAD."""
+    source_dir = _init_meson_project(tmp_path)
+    builddir = tmp_path / 'build'
+    _write_projectinfo(builddir, name='demo', version='1.0.0')
+    _write_mesoninfo(builddir, source_dir)
+
+    diff_args: list[list[str]] = []
+
+    def mock_run_git(self, args: list, cwd: Path, capture: bool = True):
+        if args[:2] == ['rev-parse', '--show-toplevel']:
+            return MagicMock(returncode=0, stdout=str(cwd), stderr='')
+        if args[:2] == ['diff', '--name-status']:
+            diff_args.append(args)
+            return MagicMock(returncode=0, stdout='M\tmodified.txt\n', stderr='')
+        if args[:3] == ['ls-files', '--others', '--exclude-standard']:
+            return MagicMock(returncode=0, stdout='', stderr='')
+        return MagicMock(returncode=1, stdout='', stderr='')
+
+    context = MagicMock(spec=Context)
+    args = _patch_args(builddir=builddir, base='v1.0', include_uncommitted=True, list_only=True)
+    cmd = Patch(args, context)
+
+    with (
+        patch('pathlib.Path.cwd', return_value=tmp_path),
+        patch.object(Patch, '_run_git', mock_run_git),
+    ):
+        result = cmd.execute()
+
+    assert result == os.EX_OK
+    assert diff_args == [['diff', '--name-status', '--no-renames', 'v1.0']]
+
+
+def test_patch_committed_mode_uses_base_range_and_no_renames(tmp_path: Path) -> None:
+    """Committed-only mode diffs base..HEAD and passes --no-renames for determinism."""
+    source_dir = _init_meson_project(tmp_path)
+    builddir = tmp_path / 'build'
+    _write_projectinfo(builddir, name='demo', version='1.0.0')
+    _write_mesoninfo(builddir, source_dir)
+
+    diff_args: list[list[str]] = []
+
+    def mock_run_git(self, args: list, cwd: Path, capture: bool = True):
+        if args[:2] == ['rev-parse', '--show-toplevel']:
+            return MagicMock(returncode=0, stdout=str(cwd), stderr='')
+        if args[:2] == ['diff', '--name-status']:
+            diff_args.append(args)
+            return MagicMock(returncode=0, stdout='M\tmodified.txt\n', stderr='')
+        return MagicMock(returncode=1, stdout='', stderr='')
+
+    context = MagicMock(spec=Context)
+    args = _patch_args(builddir=builddir, base='v1.0', include_uncommitted=False, list_only=True)
+    cmd = Patch(args, context)
+
+    with (
+        patch('pathlib.Path.cwd', return_value=tmp_path),
+        patch.object(Patch, '_run_git', mock_run_git),
+    ):
+        result = cmd.execute()
+
+    assert result == os.EX_OK
+    assert diff_args == [['diff', '--name-status', '--no-renames', 'v1.0..HEAD']]
+
+
+def test_patch_renamed_file_reported_as_deletion_errors(tmp_path: Path) -> None:
+    """With --no-renames a rename surfaces as a delete of the old path and is rejected."""
+    source_dir = _init_meson_project(tmp_path)
+    builddir = tmp_path / 'build'
+    _write_projectinfo(builddir, name='demo', version='1.0.0')
+    _write_mesoninfo(builddir, source_dir)
+
+    def mock_run_git(self, args: list, cwd: Path, capture: bool = True):
+        if args[:2] == ['rev-parse', '--show-toplevel']:
+            return MagicMock(returncode=0, stdout=str(cwd), stderr='')
+        if args[:2] == ['diff', '--name-status']:
+            # --no-renames reports a rename as add(new) + delete(old).
+            return MagicMock(returncode=0, stdout='A\tnew.txt\nD\told.txt\n', stderr='')
+        if args[:3] == ['ls-files', '--others', '--exclude-standard']:
+            return MagicMock(returncode=0, stdout='', stderr='')
+        return MagicMock(returncode=1, stdout='', stderr='')
+
+    context = MagicMock(spec=Context)
+    args = _patch_args(builddir=builddir)
+    cmd = Patch(args, context)
+
+    with (
+        patch('pathlib.Path.cwd', return_value=tmp_path),
+        patch.object(Patch, '_run_git', mock_run_git),
+    ):
+        result = cmd.execute()
+    assert result == os.EX_DATAERR
+
+
 def test_patch_list_only_prints_paths(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     source_dir = _init_meson_project(tmp_path)
     builddir = tmp_path / 'build'

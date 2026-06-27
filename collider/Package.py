@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from collider.log import logger
+from collider.utils.fs import atomic_write_text
 
 
 def _load_wrap_section(
@@ -106,4 +107,4 @@ class WrapPackage:  # pylint: disable=too-many-instance-attributes
             raise FileExistsError(f'Wrap file "{wrap_path}" already exists.')
 
         # Meson resolves dependencies from the wrap file, not from a populated directory.
-        wrap_path.write_text(self.wrap_text, encoding='utf-8')
+        atomic_write_text(wrap_path, self.wrap_text, encoding='utf-8')

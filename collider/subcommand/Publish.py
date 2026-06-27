@@ -30,7 +30,7 @@ from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.meson.info import load_project_metadata
 from collider.utils.meson.meson import DEFAULT_BUILD_DIR
-from collider.utils.network import DEFAULT_NETWORK_TIMEOUT
+from collider.utils.network import DEFAULT_NETWORK_TIMEOUT, safe_urlopen
 from collider.utils.packaging import compute_file_hash
 
 
@@ -379,7 +379,7 @@ class Publish(SubcommandInterface):
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
+            with safe_urlopen(request, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
                 if response.status != 201:
                     raise ValueError(
                         f'Remote push failed with unexpected HTTP status {response.status}.'
