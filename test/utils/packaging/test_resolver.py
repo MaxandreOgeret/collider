@@ -301,6 +301,27 @@ def test_provider_find_matches_returns_candidates() -> None:
     assert versions[1] == '1.2.0'
 
 
+def test_provider_find_matches_skips_unsafe_version() -> None:
+    """find_matches drops entries whose version is not a safe path segment."""
+    packages: dict = {}
+    add_wrap_entry(packages, 'foo', '../evil', None)
+    repo = _make_repo(packages)
+    repos = {'local': repo}
+    provider = ColliderProvider(repos, build_dep_name_index(repos))
+
+    req = Requirement('foo')
+    identifier = provider.identify(req)
+    matches = list(
+        provider.find_matches(
+            identifier=identifier,
+            requirements={identifier: [req]},
+            incompatibilities={identifier: []},
+        )
+    )
+
+    assert matches == []
+
+
 def test_provider_is_satisfied_by_no_constraint() -> None:
     """Any candidate satisfies a requirement with no version spec."""
     packages = _make_packages(('zlib', '1.3.1', ['zlib']))

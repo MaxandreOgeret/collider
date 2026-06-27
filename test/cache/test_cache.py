@@ -113,6 +113,15 @@ def test_wrap_cache_has_package(tmp_path: Path):
     assert cache.has_package('foo', '1.0.0') is True
 
 
+def test_wrap_cache_has_package_rejects_unsafe_hash(tmp_path: Path):
+    """has_package treats an unsafe source_hash as not cached instead of crashing."""
+    cache = WrapCache(tmp_path / 'cache')
+    package = WrapPackage.from_wrap_text('foo', '1.0.0', _wrap_text('../../evil'))
+
+    cache.store_wrap(package)
+    assert cache.has_package('foo', '1.0.0') is False
+
+
 def test_wrap_cache_prepare_packagecache_downloads(tmp_path: Path, monkeypatch):
     cache = WrapCache(tmp_path / 'cache')
     subprojects = tmp_path / 'project' / 'subprojects'

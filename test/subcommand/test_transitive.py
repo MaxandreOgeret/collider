@@ -845,6 +845,61 @@ def test_add_already_installed_transitive_becomes_direct_dependency(
     assert 'already installed; adding it to collider.json as a direct dependency' in caplog.text
 
 
+def test_add_already_installed_transitive_creates_colliderfile(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Promoting an installed transitive wrap creates collider.json when it is missing."""
+    from collider.file_model.lockfile import LockedPackage, Lockfile
+
+    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n')
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir(exist_ok=True)
+    (subprojects / 'protobuf.wrap').write_text('[wrap-file]\n')
+
+    lockfile = Lockfile(
+        packages={
+            'protobuf': LockedPackage(
+                version='25.2-4',
+                wrap_hash='sha256:' + '0' * 64,
+                origin='https://wrapdb.example.com/v2/',
+            )
+        }
+    )
+    lockfile.save(tmp_path / Lockfile.get_filename())
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    args = argparse.Namespace(
+        package='protobuf',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = cmd.execute()
+    finally:
+        os.chdir(cwd)
+
+    assert result == os.EX_OK
+    repo.get_package.assert_not_called()
+    colliderfile_path = tmp_path / Colliderfile.get_filename()
+    assert colliderfile_path.exists()
+    colliderfile = Colliderfile.from_path(colliderfile_path)
+    assert [dep.name for dep in colliderfile.dependencies] == ['protobuf']
+    assert 'Created collider.json.' in caplog.text
+
+
 def test_add_force_reinstalls(tmp_path: Path, monkeypatch) -> None:
     """pkg add --force removes old artifacts and reinstalls the package."""
     _init_project(tmp_path)
