@@ -50,10 +50,8 @@ def _ensure_meson_validated() -> None:
 def scan_project_info(meson_build: Path) -> Optional[dict]:
     """
     Run `meson introspect --projectinfo` on a meson.build file.
-
     Best-effort: any failure (meson unavailable, parse error, etc.) returns None
     so callers can degrade gracefully without special-casing every error type.
-
     :param meson_build: Path to the meson.build file.
     :return: Raw project info dict, or None on any failure.
     """

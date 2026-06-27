@@ -118,3 +118,21 @@ def test_init_graceful_when_introspect_fails(tmp_path: Path) -> None:
         os.chdir(cwd)
 
     assert (tmp_path / Colliderfile.get_filename()).exists()
+
+
+def test_init_license_hint_falls_back_on_undefined_version(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An undefined project version falls back to 1.0.0 in the example hint."""
+    (tmp_path / 'meson.build').write_text('project("demo", "c")\n')
+
+    info = {'descriptive_name': 'demo', 'version': 'undefined', 'license': ['unknown']}
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with _mock_project_info(info), caplog.at_level(logging.WARNING):
+            assert run_subcommand(Subcommand.INIT, []) == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert any("version: '1.0.0'" in r.message for r in caplog.records)

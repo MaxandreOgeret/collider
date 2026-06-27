@@ -248,6 +248,45 @@ def test_scan_passes_correct_args_to_meson(monkeypatch, tmp_path: Path) -> None:
     assert captured_args[3] == str(meson_build)
 
 
+def test_scan_project_info_parses_output(monkeypatch, tmp_path: Path) -> None:
+    """Valid introspect output is parsed and the projectinfo command is used."""
+    meson_build = tmp_path / 'meson.build'
+    meson_build.write_text("project('test', 'c')")
+    captured_args = []
+
+    def fake_run(args, **kwargs):
+        captured_args.extend(args)
+        return json.dumps({'descriptive_name': 'test', 'license': ['MIT']})
+
+    monkeypatch.setattr(scan.command, 'run', fake_run)
+    result = scan.scan_project_info(meson_build)
+
+    assert result == {'descriptive_name': 'test', 'license': ['MIT']}
+    assert captured_args[:3] == ['meson', 'introspect', '--projectinfo']
+    assert captured_args[3] == str(meson_build)
+
+
+def test_scan_project_info_returns_none_on_failure(monkeypatch, tmp_path: Path) -> None:
+    """Any introspection error degrades to None instead of raising."""
+    meson_build = tmp_path / 'meson.build'
+    meson_build.write_text("project('test', 'c')")
+
+    def fake_run(args, **kwargs):
+        raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(scan.command, 'run', fake_run)
+    assert scan.scan_project_info(meson_build) is None
+
+
+def test_scan_project_info_returns_none_on_empty_output(monkeypatch, tmp_path: Path) -> None:
+    """Empty introspect output yields None rather than a parse error."""
+    meson_build = tmp_path / 'meson.build'
+    meson_build.write_text("project('test', 'c')")
+
+    monkeypatch.setattr(scan.command, 'run', lambda args, **kwargs: '')
+    assert scan.scan_project_info(meson_build) is None
+
+
 def test_filter_default_includes_required(_all_deps) -> None:
     """Required dependencies are included by default."""
     result = scan.filter_dependencies(_all_deps)

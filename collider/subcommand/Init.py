@@ -50,10 +50,8 @@ class Init(SubcommandInterface):
     def _hint_missing_license(meson_path: Path) -> None:
         """
         Emit a hint when meson.build has no license field.
-
-        Missing license causes publish warnings; nudging at init time avoids
-        the user discovering the gap only when they first publish.
-
+        Missing license causes publish warnings; nudging at init time avoids the
+        user discovering the gap only when they first publish.
         :param meson_path: Path to the meson.build file.
         """
         project_info = scan_project_info(meson_path)
