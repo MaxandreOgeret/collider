@@ -14,6 +14,7 @@ from typing import Optional
 from collider.log import logger
 from collider.Package import WrapPackage, _load_wrap_section, get_provide_names
 from collider.repository.entries import RepoPackageEntry, add_wrap_entry
+from collider.utils.core import assert_safe_path_segment
 from collider.utils.fs import atomic_write_text
 from collider.utils.packaging import compute_file_hash
 from collider.utils.packaging.PackageType import PackageType
@@ -274,8 +275,4 @@ class Filesystem(RepositoryInterface):
 
     @staticmethod
     def _safe_package_segment(value: str, key: str) -> str:
-        if not value:
-            raise ValueError(f'Package {key} must not be empty.')
-        if value in ('.', '..') or Path(value).name != value or '\\' in value or '\x00' in value:
-            raise ValueError(f'Package {key} must be a safe path segment.')
-        return value
+        return assert_safe_path_segment(value, key)

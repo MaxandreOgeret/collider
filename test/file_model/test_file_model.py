@@ -154,6 +154,16 @@ def test_mock_file_model_as_file():
     assert json.loads(json_str) == {'name': 'test_as_file', 'version': 7}
 
 
+def test_mock_file_model_as_file_cleans_up_on_close():
+    """The backing temp file is removed when the handle is closed."""
+    model = MockFileModel(name='test_cleanup', version=8)
+    tmp_file = model.as_file()
+    path = Path(tmp_file.name)
+    assert path.exists()
+    tmp_file.close()
+    assert not path.exists()
+
+
 def test_mock_file_model_set_path_invalid():
     """Test _set_path with a directory."""
     model = MockFileModel(name='test')

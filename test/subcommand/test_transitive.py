@@ -227,6 +227,100 @@ def test_add_creates_colliderfile_when_missing(tmp_path: Path, monkeypatch) -> N
     assert [dep.name for dep in colliderfile.dependencies] == ['grpc']
 
 
+def test_add_does_not_create_colliderfile_on_failure(tmp_path: Path) -> None:
+    """A failed add must not leave a stray collider.json behind."""
+    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    args = argparse.Namespace(
+        package='ghost',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch('collider.subcommand.pkg.Add.search_packages', return_value={}):
+            result = cmd.execute()
+    finally:
+        os.chdir(cwd)
+
+    assert result == os.EX_UNAVAILABLE
+    assert not (tmp_path / Colliderfile.get_filename()).exists()
+
+
+def test_transitive_rejects_unsafe_package_name(tmp_path: Path, monkeypatch) -> None:
+    """A traversal transitive package name is rejected without writing outside subprojects."""
+    _init_project(tmp_path)
+
+    grpc_pkg, grpc_content = _make_package('grpc', '1.59.1')
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = grpc_pkg
+    context = _make_context(tmp_path, {'repo1': repo})
+
+    monkeypatch.setattr(
+        urllib.request, 'urlopen', lambda url, **kwargs: _DummyResponse(grpc_content)
+    )
+
+    resolved_mapping = {
+        'grpc': Candidate('grpc', '1.59.1', 'repo1'),
+        '../../evil': Candidate('../../evil', '1.0.0', 'repo1'),
+    }
+
+    args = argparse.Namespace(
+        package='grpc',
+        offline=False,
+        version=None,
+        include=None,
+        exclude=None,
+        include_conditional=False,
+        exclude_optional=False,
+        force=False,
+    )
+    cmd = Add(args, context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with (
+            patch('collider.subcommand.pkg.Add.search_packages') as mock_search,
+            patch(
+                'collider.subcommand.pkg.Add.resolve_dependencies',
+                return_value=_make_resolution_result(resolved_mapping),
+            ),
+            patch(
+                'collider.subcommand.pkg.Add.build_dep_name_index',
+                return_value={'evil': '../../evil'},
+            ),
+        ):
+            grpc_key = make_repo_key('grpc', '1.59.1', PackageType.WRAP)
+            grpc_entry = RepoPackageEntry('grpc', '1.59.1', PackageType.WRAP)
+            mock_search.return_value = {'repo1': {grpc_key: grpc_entry}}
+            result = cmd.execute()
+    finally:
+        os.chdir(cwd)
+
+    assert result == os.EX_IOERR
+    # The traversal target must not be created outside subprojects.
+    assert not (tmp_path.parent / 'evil.wrap').exists()
+    # A failed transitive install does not record the root dependency.
+    colliderfile = Colliderfile.from_path(tmp_path / Colliderfile.get_filename())
+    assert [dep.name for dep in colliderfile.dependencies] == []
+
+
 def test_transitive_add_skips_system_deps(
     tmp_path: Path, monkeypatch, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -12,12 +12,49 @@ import inspect
 import pkgutil
 import types
 
+from pathlib import Path
 from typing import Optional, Type, TypeVar
 
 from collider.log import logger
 
 
 T = TypeVar('T', bound=type)
+
+
+def is_safe_path_segment(value: str) -> bool:
+    """
+    Report whether a value is safe to use as a single filesystem path segment.
+    Rejects empty values, '.'/'..', and anything containing a separator or NUL,
+    so untrusted names/versions cannot escape their target directory.
+    :param value: Value to check.
+    :return: True when the value is a safe path segment.
+    """
+    if not value:
+        return False
+    return (
+        value not in ('.', '..')
+        and Path(value).name == value
+        and '\\' not in value
+        and '\x00' not in value
+    )
+
+
+def assert_safe_path_segment(value: str, kind: str = 'name') -> str:
+    """
+    Validate that an untrusted value is safe to use as a single path segment.
+    Package names and versions come from repository metadata and are turned into
+    wrap and subproject paths, so reject anything that could escape the target
+    directory before it reaches the filesystem.
+    :param value: Value to validate.
+    :param kind: Label used in error messages, e.g. "name" or "version".
+    :return: The validated value unchanged.
+    :raises ValueError: When the value is empty or not a safe path segment.
+    """
+    if not value:
+        raise ValueError(f'Package {kind} must not be empty.')
+    if not is_safe_path_segment(value):
+        raise ValueError(f'Package {kind} must be a safe path segment.')
+    return value
 
 
 def discover_plugins(

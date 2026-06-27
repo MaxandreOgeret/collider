@@ -28,6 +28,7 @@ from collider.repository.entries import RepoPackageEntry
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
+from collider.utils.core import assert_safe_path_segment
 from collider.utils.meson import SUBPROJECTS_DIR
 from collider.utils.meson.project import validate_meson_project_cwd
 from collider.utils.packaging.Dependency import DependencySource
@@ -435,6 +436,13 @@ class Install(SubcommandInterface):
         :param repo_key: Encoded repo key.
         :return: WrapPackage on success, None on failure.
         """
+        # Names from repository metadata become subproject and cache paths.
+        try:
+            assert_safe_path_segment(entry.name)
+        except ValueError as e:
+            logger.critical(str(e))
+            return None
+
         if self.offline and repo.requires_network():
             package = self.context.cache.load_wrap(entry.name, entry.version)
             if package is None:
