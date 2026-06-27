@@ -16,6 +16,7 @@ from collider.log import logger
 from collider.Package import WrapPackage
 from collider.repository.entries import RepoPackageEntry, packages_from_releases
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
+from collider.utils.core import assert_safe_path_segment
 from collider.utils.fs import atomic_write_text
 from collider.utils.meson.infoTypes import WrapDbReleasesEntry
 from collider.utils.network import DEFAULT_NETWORK_TIMEOUT
@@ -27,7 +28,10 @@ _RELEASES_TTL_SECONDS = 300
 
 
 def _get_pkg_wrap_url(url: urllib.parse.ParseResult, package: RepoPackageEntry) -> str:
-    path = f'{package.name}_{package.version}/{package.name}.wrap'
+    # Name and version come from untrusted releases.json and shape the request path.
+    name = assert_safe_path_segment(package.name)
+    version = assert_safe_path_segment(package.version, 'version')
+    path = f'{name}_{version}/{name}.wrap'
     return urllib.parse.urljoin(url.geturl(), path)
 
 

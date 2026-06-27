@@ -17,6 +17,7 @@ from typing import Optional
 
 from collider.log import logger
 from collider.Package import WrapPackage
+from collider.utils.core import assert_safe_path_segment, is_safe_path_segment
 from collider.utils.fs import atomic_write_text
 from collider.utils.meson.scan import ScannedDependency
 from collider.utils.network import DEFAULT_NETWORK_TIMEOUT
@@ -38,6 +39,9 @@ class WrapCache:
 
     def store_wrap(self, package: WrapPackage) -> Path:
         """Persist a wrap so installs can proceed without network access."""
+        # Name and version come from repository metadata and become a path here.
+        assert_safe_path_segment(package.name)
+        assert_safe_path_segment(package.version, 'version')
         self.wraps_dir.mkdir(parents=True, exist_ok=True)
         wrap_path = self.wraps_dir / f'{package.name}_{package.version}.wrap'
         # Wrap cache decouples installs from repository availability.
@@ -46,6 +50,10 @@ class WrapCache:
 
     def load_wrap(self, name: str, version: str) -> Optional[WrapPackage]:
         """Load a cached wrap to reuse the same validation rules."""
+        # An unsafe name can never have been cached (writes reject it), so treat
+        # it as a miss rather than touching a traversed path or raising.
+        if not (is_safe_path_segment(name) and is_safe_path_segment(version)):
+            return None
         wrap_path = self.wraps_dir / f'{name}_{version}.wrap'
         if not wrap_path.exists():
             return None
@@ -87,6 +95,9 @@ class WrapCache:
         return sorted(versions)
 
     def _archive_cached(self, expected_hash: str, filename: str) -> bool:
+        # The hash comes from untrusted wrap metadata and becomes a path segment.
+        if not is_safe_path_segment(expected_hash):
+            return False
         safe_name = Path(filename).name
         cached_path = self.archives_dir / f'{expected_hash}-{safe_name}'
         return cached_path.exists()
@@ -118,6 +129,9 @@ class WrapCache:
         scanned: list[ScannedDependency],
     ) -> Path:
         """Persist dependency scan results so future resolutions skip introspection."""
+        # Name and version come from repository metadata and become a path here.
+        assert_safe_path_segment(name)
+        assert_safe_path_segment(version, 'version')
         self.scans_dir.mkdir(parents=True, exist_ok=True)
         scan_path = self.scans_dir / f'{name}_{version}.json'
         data = [
@@ -135,6 +149,9 @@ class WrapCache:
 
     def load_scan(self, name: str, version: str) -> Optional[list[ScannedDependency]]:
         """Load cached scan results, returning None on miss or corruption."""
+        # Unsafe names are never cached; treat as a miss without touching disk.
+        if not (is_safe_path_segment(name) and is_safe_path_segment(version)):
+            return None
         scan_path = self.scans_dir / f'{name}_{version}.json'
         if not scan_path.exists():
             return None
@@ -177,6 +194,8 @@ class WrapCache:
         self, package: WrapPackage, subprojects_dir: Path, offline: bool
     ) -> None:
         """Populate Meson packagecache so wrap resolution can stay offline."""
+        # Reject unsafe names before callers install the package into subprojects.
+        assert_safe_path_segment(package.name)
         packagecache = subprojects_dir / 'packagecache'
         packagecache.mkdir(parents=True, exist_ok=True)
 
@@ -202,6 +221,8 @@ class WrapCache:
 
     def _ensure_archive(self, url: str, filename: str, expected_hash: str, offline: bool) -> Path:
         """Resolve archives into the cache while enforcing hashes and protocols."""
+        # The hash comes from untrusted wrap metadata and becomes a path segment.
+        assert_safe_path_segment(expected_hash, 'hash')
         self.archives_dir.mkdir(parents=True, exist_ok=True)
         # Use the basename to avoid path traversal from wrap metadata.
         safe_name = Path(filename).name

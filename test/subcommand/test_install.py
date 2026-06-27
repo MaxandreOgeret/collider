@@ -503,6 +503,20 @@ def test_install_does_not_warn_when_lockfile_already_matches(
     assert 'run "collider lock" to refresh it' not in caplog.text
 
 
+def test_install_fetch_package_rejects_unsafe_name(tmp_path: Path) -> None:
+    """_fetch_package returns None when the entry name is not a safe path segment."""
+    from collider.subcommand.Install import Install
+
+    repo = MagicMock(spec=RepositoryInterface)
+    context = _make_context(tmp_path, repo)
+    install = Install(argparse.Namespace(offline=False), context)
+
+    entry = RepoPackageEntry('../evil', '1.0.0', PackageType.WRAP)
+    repo_key = make_repo_key('../evil', '1.0.0', PackageType.WRAP)
+
+    assert install._fetch_package(entry, repo, repo_key) is None
+
+
 def test_install_adds_dependency_without_version(tmp_path: Path, monkeypatch) -> None:
     """New dependency in collider.json has no version pinned."""
     _init_project(tmp_path)

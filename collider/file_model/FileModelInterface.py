@@ -164,7 +164,12 @@ class FileModelInterface(ABC):
         return json.dumps(self.as_dict())
 
     def as_file(self) -> IO[str]:
-        """Provide a temp file handle for consumers that need a path."""
+        """
+        Provide a rewound temp file handle for use as a context manager.
+        The backing file is removed when the handle is closed, so use it within a
+        `with` block and read it before the block exits.
+        :return: An open, rewound temp file handle.
+        """
         tmp = tempfile.NamedTemporaryFile(
             'w+',
             encoding='UTF-8',

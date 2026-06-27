@@ -188,8 +188,12 @@ Examples:
             return None
 
         if self.include_uncommitted:
-            # HEAD vs working tree and index; plus untracked.
-            status = self._run_git(['diff', '--name-status', 'HEAD'], cwd=source_dir)
+            # base revision vs working tree and index (defaults to HEAD); plus untracked.
+            # --no-renames keeps output deterministic regardless of git's rename config:
+            # a rename becomes add + delete, and the delete is caught below.
+            status = self._run_git(
+                ['diff', '--name-status', '--no-renames', self.base_rev], cwd=source_dir
+            )
             if status.returncode != 0:
                 logger.critical(f'Git diff failed: {status.stderr or status.stdout}')
                 return None
@@ -206,7 +210,8 @@ Examples:
                     logger.critical(
                         f'Deleted file "{path}" cannot be included in a Meson wrap patch; '
                         'wrap patches cannot remove files cleanly. Commit the deletion or '
-                        'exclude it from the patch.'
+                        'exclude it from the patch. (A rename is reported as a deletion of '
+                        'the old path plus an addition of the new one.)'
                     )
                     return None
                 paths_from_diff.append(path)
@@ -224,8 +229,11 @@ Examples:
                     paths_from_diff.append(p)
             return paths_from_diff
 
-        # Committed changes only: base..HEAD.
-        status = self._run_git(['diff', '--name-status', f'{self.base_rev}..HEAD'], cwd=source_dir)
+        # Committed changes only: base..HEAD. --no-renames so renames surface as add +
+        # delete deterministically and the delete is rejected below.
+        status = self._run_git(
+            ['diff', '--name-status', '--no-renames', f'{self.base_rev}..HEAD'], cwd=source_dir
+        )
         if status.returncode != 0:
             logger.critical(f'Git diff failed: {status.stderr or status.stdout}')
             return None
@@ -241,7 +249,8 @@ Examples:
             if status_code == 'D':
                 logger.critical(
                     f'Deleted file "{path}" cannot be included in a Meson wrap patch; '
-                    'wrap patches cannot remove files cleanly.'
+                    'wrap patches cannot remove files cleanly. (A rename is reported as a '
+                    'deletion of the old path plus an addition of the new one.)'
                 )
                 return None
             paths.append(path)

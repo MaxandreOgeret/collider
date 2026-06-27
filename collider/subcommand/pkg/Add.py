@@ -29,6 +29,7 @@ from collider.repository.entries import RepoPackageEntry
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
+from collider.utils.core import assert_safe_path_segment
 from collider.utils.meson import SUBPROJECTS_DIR
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.PackageType import PackageType
@@ -144,15 +145,16 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
             return os.EX_NOINPUT
 
         colliderfile_path = Path.cwd().joinpath(Colliderfile.get_filename())
-        if colliderfile_path.exists():
+        colliderfile_existed = colliderfile_path.exists()
+        if colliderfile_existed:
             if colliderfile_path.is_dir():
                 logger.critical('collider.json exists but is a directory.')
                 return os.EX_DATAERR
             colliderfile = Colliderfile.from_path(colliderfile_path)
         else:
-            colliderfile = Colliderfile()
-            colliderfile.save(colliderfile_path)
-            logger.info('Created collider.json.')
+            # Defer writing collider.json until the dependency is actually added,
+            # so a failed install never leaves a stray empty file behind.
+            colliderfile = Colliderfile(path=colliderfile_path)
         version_spec_str = self._resolve_version_specifier_text(colliderfile)
 
         wrap_path = Path.cwd() / SUBPROJECTS_DIR / f'{self.package_name}.wrap'
@@ -171,6 +173,8 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
                     RepoPackageEntry(self.package_name, '', PackageType.WRAP),
                     version_spec_str,
                 )
+                if not colliderfile_existed:
+                    logger.info('Created collider.json.')
                 if Path.cwd().joinpath(Lockfile.get_filename()).exists():
                     logger.warning(
                         f'collider.lock was not updated for "{self.package_name}"; '
@@ -223,6 +227,8 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
             return transitive_result
 
         self._add_dependency(colliderfile, newest_entry, version_spec_str)
+        if not colliderfile_existed:
+            logger.info('Created collider.json.')
         self._warn_if_lockfile_stale(newest_entry, package)
         return os.EX_OK
 
@@ -364,6 +370,13 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
         :param quiet: Log install progress at DEBUG instead of INFO.
         :return: Installed WrapPackage on success, None on failure.
         """
+        # Names from repository metadata become subproject and cache paths.
+        try:
+            assert_safe_path_segment(entry.name)
+        except ValueError as e:
+            logger.critical(str(e))
+            return None
+
         log = logger.debug if quiet else logger.info
         log(f'Installing package "{entry.name}" (version {entry.version})...')
         logger.debug(f'Fetching package "{repo_key}".')

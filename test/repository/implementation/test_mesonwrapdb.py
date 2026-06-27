@@ -125,6 +125,36 @@ def test_wrap_releases_to_packages_empty_versions():
     assert packages == {}
 
 
+def test_wrap_releases_to_packages_skips_unsafe_name_and_version():
+    """Traversal names/versions from an untrusted releases.json are dropped at the boundary."""
+    releases = {
+        '../../evil': {'versions': ['1.0.0']},
+        'foo': {'versions': ['1.0.0', '../../evil']},
+    }
+    packages = _wrap_releases_to_packages(releases)
+
+    names = {entry.name for entry in packages.values()}
+    versions = {entry.version for entry in packages.values()}
+    assert names == {'foo'}
+    assert versions == {'1.0.0'}
+
+
+def test_wrap_url_builder_rejects_unsafe_name():
+    """A traversal name cannot redirect the fetch path outside the repo API prefix."""
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    entry = RepoPackageEntry('../../../etc', '1.2.3', PackageType.WRAP)
+    with pytest.raises(ValueError):
+        _get_pkg_wrap_url(url, entry)
+
+
+def test_wrap_url_builder_rejects_unsafe_version():
+    """A traversal version cannot redirect the fetch path outside the repo API prefix."""
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    entry = RepoPackageEntry('foo', '../../secret', PackageType.WRAP)
+    with pytest.raises(ValueError):
+        _get_pkg_wrap_url(url, entry)
+
+
 def test_wrap_url_builders():
     url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
     entry = RepoPackageEntry('foo', '1.2.3', PackageType.WRAP)
