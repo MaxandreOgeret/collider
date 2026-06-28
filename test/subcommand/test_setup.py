@@ -3,15 +3,56 @@
 
 """Test the setup subcommand."""
 
+import argparse
+import logging
 import os
 import re
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
+from collider.Context import Context
+from collider.file_model.lockfile import LockedPackage, Lockfile
+from collider.subcommand.Setup import Setup
 from collider.utils import meson
 from test.common.common import Subcommand, run_subcommand
+
+
+def _force_fallback_args(sourcedir: Path, meson_args: list[str] | None = None) -> list[str]:
+    """Drive Setup._force_fallback_args in isolation, without invoking Meson."""
+    args = argparse.Namespace(
+        sourcedir=sourcedir,
+        builddir=Path('build'),
+        meson_setup_args=(['--', *meson_args] if meson_args else []),
+    )
+    return Setup(args, MagicMock(spec=Context))._force_fallback_args()
+
+
+def _write_wrapped_foo_project(sourcedir: Path) -> None:
+    """Create a project whose `dependency('foo')` is backed by a present local wrap."""
+    subprojects = sourcedir / 'subprojects'
+    subprojects.mkdir(parents=True)
+    (sourcedir / 'collider.json').write_text('{}')
+    (sourcedir / 'meson.build').write_text(
+        "project('p', 'c', version: '1.0.0', license: 'MIT')\nfoo_dep = dependency('foo')\n"
+    )
+    # The subproject directory already exists, so Meson resolves 'foo' locally (no download).
+    (subprojects / 'foo.wrap').write_text(
+        '[wrap-file]\n'
+        'directory = foo\n'
+        'source_url = https://example.invalid/foo.tar.gz\n'
+        'source_filename = foo.tar.gz\n'
+        f'source_hash = {"0" * 64}\n'
+        '\n[provide]\n'
+        'foo = foo_dep\n'
+    )
+    foo_dir = subprojects / 'foo'
+    foo_dir.mkdir()
+    (foo_dir / 'meson.build').write_text(
+        "project('foo', 'c', version: '1.2.3')\nfoo_dep = declare_dependency()\n"
+    )
 
 
 def test_setup_meson_unavailable_returns_ex_unavailable(tmp_path: Path, monkeypatch) -> None:
@@ -175,6 +216,231 @@ def test_preexisting_builddir_not_removed_on_failure(tmp_path: Path):
     )
     assert builddir.exists()
     assert sentinel.exists()
+
+
+def test_setup_forces_fallback_for_present_wraps(tmp_path: Path, capfd: pytest.CaptureFixture):
+    """Without a lock, collider forces all present wraps and warns about scoping."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(sourcedir), '--builddir', str(tmp_path / 'build')],
+            verbose=True,
+        )
+        == os.EX_OK
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert '--force-fallback-for=foo' in stderr
+    assert 'No collider.lock found' in stderr
+    # The lock-scoped exclusion notice must not fire when there is no lock.
+    assert 'not in collider.lock' not in stderr
+
+
+def test_setup_with_lock_scopes_force_to_managed_packages(
+    tmp_path: Path, capfd: pytest.CaptureFixture
+):
+    """With a lock, only managed packages are forced; an unmanaged wrap is left alone."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    # bar is an unmanaged wrap (not in the lock); it must not be forced.
+    (sourcedir / 'subprojects' / 'bar.wrap').write_text(
+        '[wrap-file]\ndirectory = bar\nsource_url = https://example.invalid/bar.tar.gz\n'
+        f'source_filename = bar.tar.gz\nsource_hash = {"0" * 64}\n\n[provide]\nbar = bar_dep\n'
+    )
+    Lockfile(
+        dependencies={
+            'foo': LockedPackage(
+                version='1.2.3', wrap_hash='sha256:' + '0' * 64, origin='https://wrapdb.example/v2/'
+            )
+        },
+    ).save(sourcedir / Lockfile.get_filename())
+
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(sourcedir), '--builddir', str(tmp_path / 'build')],
+            verbose=True,
+        )
+        == os.EX_OK
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert '--force-fallback-for=foo' in stderr
+    assert '--force-fallback-for=bar' not in stderr
+    assert 'foo,bar' not in stderr and 'bar,foo' not in stderr
+    assert 'No collider.lock found' not in stderr
+    # The unmanaged wrap is surfaced, not silently dropped.
+    assert 'not in collider.lock' in stderr and 'bar' in stderr
+
+
+def test_setup_empty_lock_surfaces_unscoped_wraps(tmp_path: Path, capfd: pytest.CaptureFixture):
+    """An empty/stale lock that omits a present wrap reports it instead of silently dropping it."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    Lockfile().save(sourcedir / Lockfile.get_filename())
+
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(sourcedir), '--builddir', str(tmp_path / 'build')],
+            verbose=True,
+        )
+        == os.EX_OK
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert '--force-fallback-for' not in stderr  # nothing forced under an empty lock
+    assert 'not in collider.lock' in stderr and 'foo' in stderr
+
+
+def test_setup_malformed_lock_errors(tmp_path: Path, capfd: pytest.CaptureFixture):
+    """A malformed collider.lock aborts setup before Meson runs."""
+    sourcedir = tmp_path / 'project'
+    sourcedir.mkdir()
+    (sourcedir / 'collider.json').write_text('{}')
+    (sourcedir / 'meson.build').write_text("project('p', 'c', version: '1.0.0', license: 'MIT')\n")
+    (sourcedir / 'collider.lock').write_text('{ not valid json', encoding='utf-8')
+
+    builddir = tmp_path / 'build'
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(sourcedir), '--builddir', str(builddir)],
+        )
+        == os.EX_DATAERR
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert 'collider.lock is malformed' in stderr
+    assert not builddir.exists()
+
+
+def test_setup_defers_to_user_supplied_force_fallback(tmp_path: Path, capfd: pytest.CaptureFixture):
+    """A user --force-fallback-for takes over: collider must not inject its own (Meson last-wins)."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            [
+                '--sourcedir',
+                str(sourcedir),
+                '--builddir',
+                str(tmp_path / 'build'),
+                '--',
+                '--force-fallback-for=bar',
+            ],
+            verbose=True,
+        )
+        == os.EX_OK
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert '--force-fallback-for=bar' in stderr
+    assert '--force-fallback-for=foo' not in stderr
+    assert 'collider will not force' in stderr
+
+
+def test_setup_no_wraps_injects_no_fallback_flag(
+    tmp_path: Path, meson_project: Path, capfd: pytest.CaptureFixture
+):
+    """Without any wraps, collider must not inject a --force-fallback-for flag."""
+    if meson_project.name == 'shared':
+        pytest.skip('shared project requires system libmd')
+
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(meson_project), '--builddir', str(tmp_path / 'build')],
+            verbose=True,
+        )
+        == os.EX_OK
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert '--force-fallback-for' not in stderr
+
+
+def test_force_args_no_lock_forces_all_and_warns(tmp_path: Path, caplog) -> None:
+    """No lock: force every present wrap and warn about imprecise scoping."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    with caplog.at_level(logging.INFO, logger='collider'):
+        assert _force_fallback_args(sourcedir) == ['--force-fallback-for=foo']
+    assert 'No collider.lock found' in caplog.text
+
+
+def test_force_args_scopes_to_lock(tmp_path: Path, caplog) -> None:
+    """With a lock, force only managed wraps and report the unmanaged one."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    (sourcedir / 'subprojects' / 'bar.wrap').write_text('[wrap-file]\ndirectory = bar\n')
+    Lockfile(
+        dependencies={
+            'foo': LockedPackage(version='1', wrap_hash='sha256:' + '0' * 64, origin='https://x/')
+        }
+    ).save(sourcedir / Lockfile.get_filename())
+    with caplog.at_level(logging.INFO, logger='collider'):
+        assert _force_fallback_args(sourcedir) == ['--force-fallback-for=foo']
+    assert 'No collider.lock found' not in caplog.text
+    assert 'not in collider.lock' in caplog.text and 'bar' in caplog.text
+
+
+def test_force_args_empty_lock_forces_nothing_but_reports(tmp_path: Path, caplog) -> None:
+    """An empty lock forces nothing yet still surfaces the present, unscoped wrap."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    Lockfile().save(sourcedir / Lockfile.get_filename())
+    with caplog.at_level(logging.INFO, logger='collider'):
+        assert _force_fallback_args(sourcedir) == []
+    assert 'not in collider.lock' in caplog.text and 'foo' in caplog.text
+
+
+def test_force_args_malformed_lock_raises(tmp_path: Path) -> None:
+    """A malformed lock raises before any Meson interaction."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    (sourcedir / 'collider.lock').write_text('{ not json', encoding='utf-8')
+    with pytest.raises(ValueError, match='malformed'):
+        _force_fallback_args(sourcedir)
+
+
+def test_force_args_malformed_lock_wins_over_user_override(tmp_path: Path) -> None:
+    """A malformed lock aborts even when the user supplies their own --force-fallback-for."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    (sourcedir / 'collider.lock').write_text('garbage', encoding='utf-8')
+    with pytest.raises(ValueError, match='malformed'):
+        _force_fallback_args(sourcedir, ['--force-fallback-for=x'])
+
+
+def test_force_args_defers_to_user_dashdash_spelling(tmp_path: Path, caplog) -> None:
+    """A user --force-fallback-for makes collider defer."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    with caplog.at_level(logging.WARNING, logger='collider'):
+        assert _force_fallback_args(sourcedir, ['--force-fallback-for=x']) == []
+    assert 'collider will not force' in caplog.text
+
+
+def test_force_args_defers_to_user_dash_d_spelling(tmp_path: Path, caplog) -> None:
+    """A user -Dforce_fallback_for must also be detected (Meson rejects both spellings at once)."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    with caplog.at_level(logging.WARNING, logger='collider'):
+        assert _force_fallback_args(sourcedir, ['-Dforce_fallback_for=x']) == []
+    assert 'collider will not force' in caplog.text
+
+
+def test_force_args_no_wraps_returns_empty(tmp_path: Path) -> None:
+    """A project with no wraps yields no force argument."""
+    sourcedir = tmp_path / 'project'
+    sourcedir.mkdir()
+    assert _force_fallback_args(sourcedir) == []
 
 
 def test_validate_failure_invalid_version(tmp_path: Path, capfd: pytest.CaptureFixture):

@@ -22,6 +22,11 @@ from collider.utils.compat import override
 from collider.utils.meson.info import InfoFile, get_project_info, validate_projectinfo
 from collider.utils.meson.infoTypes import ProjectInfo
 from collider.utils.packaging import validate_dependencies
+from collider.utils.project_state import (
+    collect_force_fallback_names,
+    managed_package_names,
+    scan_wraps,
+)
 
 
 class Setup(SubcommandInterface):
@@ -116,10 +121,16 @@ Examples:
             return os.EX_NOINPUT
 
         try:
+            fallback_args = self._force_fallback_args()
+        except ValueError as exc:
+            logger.critical(str(exc))
+            return os.EX_DATAERR
+
+        try:
             meson.setup(
                 sourcedir=self.sourcedir,
                 builddir=self.builddir,
-                args=self.meson_setup_args,
+                args=fallback_args + self.meson_setup_args,
             )
         except subprocess.CalledProcessError as e:
             logger.critical('meson setup failed: %s', e)
@@ -132,6 +143,68 @@ Examples:
             return os.EX_DATAERR
 
         return os.EX_OK
+
+    @staticmethod
+    def _user_forces_fallback(meson_args: list[str]) -> bool:
+        """
+        Detect a user-supplied force-fallback option in either Meson spelling.
+        Meson rejects setting `force_fallback_for` via both `--force-fallback-for` and
+        `-Dforce_fallback_for`, so collider must spot either form and defer rather than
+        inject a second one that aborts the build.
+        :param meson_args: Meson arguments passed after `--`.
+        """
+        names = ('--force-fallback-for', '-Dforce_fallback_for')
+        return any(
+            arg == name or arg.startswith(name + '=') for arg in meson_args for name in names
+        )
+
+    def _force_fallback_args(self) -> list[str]:
+        """
+        Force Meson to use collider's wraps so the build matches locked versions.
+        Scope comes from collider.lock when present (direct + transitive, authoritative);
+        without a lock, every present wrap is forced as a best effort and the user is warned
+        that transitive deps may not be scoped correctly. Meson keeps only the last
+        `--force-fallback-for`, so a user-supplied one is deferred to rather than overridden
+        with a flag Meson would discard alongside a misleading message.
+        :return: A single `--force-fallback-for` argument, or an empty list.
+        :raises ValueError: When collider.lock exists but is malformed.
+        """
+        managed = managed_package_names(self.sourcedir)
+
+        if self._user_forces_fallback(self.meson_setup_args):
+            logger.warning(
+                'A "--force-fallback-for" argument was supplied; collider will not force '
+                'its managed wraps, so locked versions may be shadowed by system copies.'
+            )
+            return []
+
+        subprojects_dir = self.sourcedir / meson.SUBPROJECTS_DIR
+        forced = collect_force_fallback_names(subprojects_dir, managed)
+
+        # Surface wraps a present lock does not cover, so an empty/stale lock under-scoping
+        # the build is visible rather than a silent reproducibility hole.
+        if managed is not None:
+            excluded = sorted(set(scan_wraps(subprojects_dir)) - managed)
+            if excluded:
+                logger.info(
+                    f'{len(excluded)} wrap(s) in "subprojects/" are not in collider.lock and are '
+                    f"left to Meson's default resolution: {', '.join(excluded)}. "
+                    'Run "collider lock" if collider should manage them.'
+                )
+
+        if not forced:
+            return []
+        if managed is None:
+            logger.warning(
+                'No collider.lock found: forcing all wraps in "subprojects/" as a best effort. '
+                'Transitive dependencies may not be scoped correctly; '
+                'run "collider lock" for authoritative, reproducible resolution.'
+            )
+        logger.info(
+            f'Forcing wrap fallback for {len(forced)} managed dependency name(s) '
+            'so locked wraps are used instead of system copies.'
+        )
+        return [f'--force-fallback-for={",".join(forced)}']
 
     def _cleanup_builddir(self, builddir_preexisted: bool) -> None:
         """Remove only build directories created by this run."""
