@@ -8,7 +8,7 @@ import os
 import sys
 
 from enum import Enum
-from typing import Callable, cast
+from typing import Callable, TextIO, cast
 
 
 first_include = False
@@ -88,6 +88,14 @@ def init_logger(level: Level) -> None:
 def configure_logging(verbose: bool) -> None:
     """Switch between concise and debug logging based on CLI flags."""
     init_logger(Level.DEBUG if verbose else Level.INFO)
+
+
+def should_disable_progress(*, stream: TextIO | None = None) -> bool:
+    """Return whether animated progress output should be suppressed."""
+    ci_value = os.environ.get('CI', '').strip().lower()
+    ci_enabled = ci_value not in ('', '0', 'false', 'no', 'off')
+    output = stream if stream is not None else sys.stdout
+    return logger.level <= Level.DEBUG.value or ci_enabled or not output.isatty()
 
 
 if not first_include:
