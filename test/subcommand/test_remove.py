@@ -104,8 +104,13 @@ def test_remove_deletes_dependency_and_installed_state(
 
     subprojects = tmp_path / 'subprojects'
     subprojects.mkdir()
-    (subprojects / 'shared.wrap').write_text('[wrap-file]\n', encoding='utf-8')
-    (subprojects / 'shared').mkdir()
+    (subprojects / 'shared.wrap').write_text(
+        '[wrap-file]\ndirectory = shared-1.0.0\n',
+        encoding='utf-8',
+    )
+    extracted_dir = subprojects / 'shared-1.0.0'
+    extracted_dir.mkdir()
+    (extracted_dir / 'meson.build').write_text('project("shared")\n', encoding='utf-8')
 
     lockfile = Lockfile(
         dependencies={
@@ -130,7 +135,7 @@ def test_remove_deletes_dependency_and_installed_state(
     colliderfile = Colliderfile.from_path(tmp_path / Colliderfile.get_filename())
     assert colliderfile.dependencies == []
     assert not (subprojects / 'shared.wrap').exists()
-    assert not (subprojects / 'shared').exists()
+    assert not (subprojects / 'shared-1.0.0').exists()
     assert 'run "collider lock" to refresh it' in caplog.text
 
 

@@ -13,6 +13,7 @@ from typing import Optional
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import Lockfile
 from collider.log import logger
+from collider.Package import get_wrap_directory
 from collider.utils.meson import SUBPROJECTS_DIR
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 
@@ -61,12 +62,20 @@ def update_collider_dependency_version(
 def remove_installed_artifacts(package_name: str) -> bool:
     """Remove installed wrap state from subprojects/ for a package."""
     removed_any = False
+    subprojects_root = Path.cwd() / SUBPROJECTS_DIR
     wrap_path = Path.cwd() / SUBPROJECTS_DIR / f'{package_name}.wrap'
+    wrap_directory = None
+    if wrap_path.exists():
+        try:
+            wrap_directory = get_wrap_directory(wrap_path.read_text(encoding='utf-8'))
+        except Exception:
+            wrap_directory = None
+
     if wrap_path.exists() or wrap_path.is_symlink():
         wrap_path.unlink()
         removed_any = True
 
-    subproject_dir = Path.cwd() / SUBPROJECTS_DIR / package_name
+    subproject_dir = subprojects_root / package_name
     if subproject_dir.is_symlink() or subproject_dir.is_file():
         subproject_dir.unlink()
         removed_any = True
@@ -74,7 +83,40 @@ def remove_installed_artifacts(package_name: str) -> bool:
         shutil.rmtree(subproject_dir)
         removed_any = True
 
+    if wrap_directory:
+        extracted_dir = subprojects_root / Path(wrap_directory)
+        if _is_safe_subproject_path(subprojects_root, extracted_dir):
+            if extracted_dir.is_dir():
+                if _looks_like_vcs_checkout(extracted_dir):
+                    logger.warning(
+                        f'Left extracted subproject directory "{extracted_dir.as_posix()}" in '
+                        'place because it looks like a VCS checkout.'
+                    )
+                else:
+                    shutil.rmtree(extracted_dir)
+                    removed_any = True
+        else:
+            logger.warning(
+                f'Ignored unsafe wrap directory "{wrap_directory}" while removing "{package_name}".'
+            )
+
     return removed_any
+
+
+def _is_safe_subproject_path(root: Path, candidate: Path) -> bool:
+    """Return True when candidate stays within the subprojects root."""
+    try:
+        resolved_root = root.resolve(strict=False)
+        resolved_candidate = candidate.resolve(strict=False)
+    except OSError:
+        return False
+
+    return resolved_candidate.is_relative_to(resolved_root)
+
+
+def _looks_like_vcs_checkout(path: Path) -> bool:
+    """Detect common VCS markers that should not be removed automatically."""
+    return any((path / marker).exists() for marker in ('.git', '.hg', '.svn'))
 
 
 def scan_wraps(subprojects_dir: Path) -> list[str]:

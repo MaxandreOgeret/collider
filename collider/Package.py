@@ -35,7 +35,22 @@ def get_provide_names(wrap_text: str) -> list[str]:
     parser, _ = _load_wrap_section(wrap_text)
     if 'provide' not in parser:
         return []
-    return sorted(parser['provide'].keys())
+    provide_section = parser['provide']
+    provide_names: set[str] = set()
+    for key, value in provide_section.items():
+        if key in {'dependency_names', 'program_names'}:
+            provide_names.update(name.strip() for name in value.split(',') if name.strip())
+        else:
+            provide_names.add(key)
+    return sorted(provide_names)
+
+
+def get_wrap_directory(wrap_text: str) -> Optional[str]:
+    """Extract the extracted-tree directory name from a wrap file, if present."""
+    parser, section = _load_wrap_section(wrap_text)
+    if 'wrap-file' not in parser:
+        return None
+    return section.get('directory')
 
 
 @dataclass(frozen=True)

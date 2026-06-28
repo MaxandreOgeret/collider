@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from collider.Package import WrapPackage
+from collider.Package import WrapPackage, get_provide_names, get_wrap_directory
 
 
 def test_wrap_package_install_writes_wrap_file(tmp_path: Path):
@@ -101,3 +101,33 @@ def test_wrap_package_warns_http_urls(caplog):
     pkg = WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
     assert pkg.source_url == 'http://example.com/foo.tar.xz'
     assert 'HTTP source URLs are allowed but insecure' in caplog.text
+
+
+def test_get_provide_names_expands_plural_keys() -> None:
+    """Plural [provide] keys are expanded into the listed dependency names."""
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+        '\n'
+        '[provide]\n'
+        'dependency_names = foo, bar\n'
+        'program_names = baz\n'
+        'qux = qux_dep\n'
+    )
+
+    assert get_provide_names(wrap_text) == ['bar', 'baz', 'foo', 'qux']
+
+
+def test_get_wrap_directory_reads_directory_field() -> None:
+    """Wrap directory metadata is read from the [wrap-file] section."""
+    wrap_text = (
+        '[wrap-file]\n'
+        'directory = foo-1.0.0\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+    )
+
+    assert get_wrap_directory(wrap_text) == 'foo-1.0.0'
