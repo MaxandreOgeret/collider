@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 import subprocess
 import tarfile
@@ -25,7 +24,7 @@ from packaging.version import InvalidVersion
 from tqdm import tqdm
 
 from collider.cache import WrapCache
-from collider.log import logger
+from collider.log import logger, should_disable_progress
 from collider.repository import search_packages
 from collider.utils.core import assert_safe_path_segment
 from collider.utils.meson.scan import (
@@ -589,7 +588,7 @@ def resolve_dependencies(
         include_names=include_names,
         exclude_names=exclude_names,
     )
-    reporter = _ProgressReporter(disable=logger.level <= logging.DEBUG)
+    reporter = _ProgressReporter(disable=should_disable_progress())
     resolver = resolvelib.Resolver(provider, reporter)
 
     root_req = Requirement(root_name, root_version_spec)
@@ -655,7 +654,7 @@ def resolve_all_dependencies(
         exclude_optional=exclude_optional,
         root_overrides=root_overrides,
     )
-    reporter = _ProgressReporter(disable=logger.level <= logging.DEBUG)
+    reporter = _ProgressReporter(disable=should_disable_progress())
     resolver = resolvelib.Resolver(provider, reporter)
 
     root_reqs = [Requirement(r.name, r.version_spec) for r in roots]
