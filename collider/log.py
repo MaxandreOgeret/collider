@@ -8,7 +8,7 @@ import os
 import sys
 
 from enum import Enum
-from typing import Callable, cast
+from typing import Callable, Optional, cast
 
 
 first_include = False
@@ -88,6 +88,22 @@ def init_logger(level: Level) -> None:
 def configure_logging(verbose: bool) -> None:
     """Switch between concise and debug logging based on CLI flags."""
     init_logger(Level.DEBUG if verbose else Level.INFO)
+
+
+def progress_disable() -> Optional[bool]:
+    """Return the value to pass to tqdm's ``disable=`` argument.
+
+    ``True`` force-hides animated progress bars when debug logging is on (the
+    bars would interleave with verbose logs) or when running under CI. ``None``
+    lets tqdm auto-detect: bars are shown on an interactive TTY and hidden when
+    output is piped or redirected, so non-interactive logs stay clean and
+    grep-able instead of filling with carriage-return spam.
+    """
+    if logger.level <= logging.DEBUG:
+        return True
+    if os.environ.get('CI'):
+        return True
+    return None
 
 
 if not first_include:

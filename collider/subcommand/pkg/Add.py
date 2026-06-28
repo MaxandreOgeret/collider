@@ -4,7 +4,6 @@
 """Add a package dependency to the project."""
 
 import argparse
-import logging
 import os
 import re
 import shutil
@@ -22,7 +21,7 @@ from tqdm import tqdm
 from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import Lockfile, compute_wrap_hash
-from collider.log import logger
+from collider.log import logger, progress_disable
 from collider.Package import WrapPackage
 from collider.repository import search_packages
 from collider.repository.entries import RepoPackageEntry
@@ -509,7 +508,7 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
             desc='Installing dependencies',
             unit='pkg',
             leave=False,
-            disable=not transitive_candidates or logger.level <= logging.DEBUG,
+            disable=not transitive_candidates or progress_disable(),
         )
         for pkg_name, candidate in progress:
             progress.set_postfix_str(pkg_name)
