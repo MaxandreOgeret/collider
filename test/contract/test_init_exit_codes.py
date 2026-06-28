@@ -32,13 +32,12 @@ def test_init_ex_ok_meson_build_present(tmp_path: Path) -> None:
     assert (tmp_path / Colliderfile.get_filename()).exists()
 
 
-def test_init_ex_dataerr_missing_meson_build(tmp_path: Path) -> None:
-    """`collider init` returns EX_DATAERR when no meson.build exists in cwd (current behavior)."""
-    # Current behavior: missing meson.build returns EX_DATAERR (65), not EX_NOINPUT.
+def test_init_ex_noinput_missing_meson_build(tmp_path: Path) -> None:
+    """`collider init` returns EX_NOINPUT when no meson.build exists in cwd."""
     cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        assert run_subcommand(Subcommand.INIT, []) == os.EX_DATAERR
+        assert run_subcommand(Subcommand.INIT, []) == os.EX_NOINPUT
     finally:
         os.chdir(cwd)
 

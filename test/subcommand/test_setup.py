@@ -68,7 +68,7 @@ def test_execute_missing_sourcedir(tmp_path: Path, capfd: pytest.CaptureFixture)
             Subcommand.SETUP,
             ['--sourcedir', str(missing_sourcedir), '--builddir', str(tmp_path)],
         )
-        == os.EX_DATAERR
+        == os.EX_NOINPUT
     )
 
     stdout, stderr = capfd.readouterr()
@@ -86,7 +86,7 @@ def test_execute_missing_mesonbuild(tmp_path: Path, capfd: pytest.CaptureFixture
             Subcommand.SETUP,
             ['--sourcedir', str(empty_sourcedir), '--builddir', str(tmp_path)],
         )
-        == os.EX_DATAERR
+        == os.EX_NOINPUT
     )
 
     stdout, stderr = capfd.readouterr()

@@ -66,7 +66,7 @@ def test_init_requires_meson_build(tmp_path: Path) -> None:
     cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        assert run_subcommand(Subcommand.INIT, []) == os.EX_DATAERR
+        assert run_subcommand(Subcommand.INIT, []) == os.EX_NOINPUT
     finally:
         os.chdir(cwd)
 

@@ -78,7 +78,7 @@ class Init(SubcommandInterface):
         meson_path = project_root / 'meson.build'
         if not meson_path.exists():
             logger.critical('No meson.build file found in current directory.')
-            return os.EX_DATAERR
+            return os.EX_NOINPUT
 
         self._hint_missing_license(meson_path)
 

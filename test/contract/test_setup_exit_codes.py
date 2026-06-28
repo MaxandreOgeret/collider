@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from collider.subcommand.Setup import Setup
 from collider.utils import meson
 from test.common.common import Subcommand, run_subcommand
 
@@ -26,14 +27,36 @@ def test_setup_ex_ok_valid_project(meson_project: Path, tmp_path: Path) -> None:
     assert result == os.EX_OK
 
 
-def test_setup_ex_dataerr_missing_sourcedir(tmp_path: Path) -> None:
-    """`collider setup` returns EX_DATAERR when the source directory does not exist."""
+def test_setup_ex_noinput_missing_sourcedir(tmp_path: Path) -> None:
+    """`collider setup` returns EX_NOINPUT when the source directory does not exist."""
     missing_sourcedir = tmp_path / 'missing_sourcedir'
     assert not missing_sourcedir.exists()
     assert (
         run_subcommand(
             Subcommand.SETUP,
             ['--sourcedir', str(missing_sourcedir), '--builddir', str(tmp_path)],
+        )
+        == os.EX_NOINPUT
+    )
+
+
+def test_setup_ex_dataerr_validation_fails(tmp_path: Path, monkeypatch) -> None:
+    """`collider setup` returns EX_DATAERR when post-setup validation fails."""
+    sourcedir = tmp_path / 'srcdir'
+    sourcedir.mkdir()
+    (sourcedir / 'collider.json').write_text('{}')
+    (sourcedir / 'meson.build').touch()
+
+    # Pass validation and setup so the EX_DATAERR comes solely from _validate
+    # returning False, which is the "data present but invalid" contract for setup.
+    monkeypatch.setattr(meson, 'validate', lambda: None)
+    monkeypatch.setattr(meson, 'setup', lambda *args, **kwargs: None)
+    monkeypatch.setattr(Setup, '_validate', lambda self: False)
+
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(sourcedir), '--builddir', str(tmp_path / 'build')],
         )
         == os.EX_DATAERR
     )
