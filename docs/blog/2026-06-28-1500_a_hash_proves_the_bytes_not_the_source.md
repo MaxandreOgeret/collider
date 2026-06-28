@@ -26,6 +26,8 @@ Sanitizing at each point of use (before the cache file, before the wrap, before 
 
 Reads and writes react differently to a rejected segment. A write raises: caching or publishing a traversal name is a corruption to stop. A read skips and logs at debug: a malformed entry in someone else's `releases.json` should not crash `collider pkg search`. The sink-level checks at each path-building call stay in place as defense in depth, and they are also where the `source_hash` is validated, since that value arrives through the wrap file rather than the index.
 
+Archive contents get the same treatment. The archive a wrap points at is untrusted input too, and a member named `../../x` is another way out of a directory. When Collider extracts an archive to scan its `meson.build`, it uses Python's tar data filter and the zip module's path sanitization, so a crafted member either lands inside the extraction directory or the scan fails. Build-time extraction into your project is Meson's, guarded by the archive hash.
+
 ## Stripping the bearer token on cross-origin redirects
 
 `collider publish` and `collider unpublish` send a bearer token to the repository's write API, namespaced under `_collider/v1/`. Python's default `urllib` opener replays a request's headers across a redirect, and that includes `Authorization`. A repository that answers a push with `302 Location: https://another-host/...` receives the token on the next request. So does a man-in-the-middle on a plaintext hop, since the redirect target is attacker-chosen.
@@ -44,13 +46,13 @@ def redirect_request(self, req, fp, code, msg, headers, newurl):
 
 `_origin` compares scheme, host, and port, with default ports normalized so `https://h` and `https://h:443` are one origin. A same-origin redirect keeps the token; any other drops it, so the redirected request arrives without credentials and the write endpoint rejects it. That rejection is the intended result.
 
-This does not make the token safe in transit. `collider serve` has no TLS, and a static bearer token is only as private as the channel under it; production deployments put a reverse proxy in front. The redirect fix is narrower: it stops Collider from sending the token to a host that was not the one it authenticated to.
+This does not make the token safe in transit. `collider serve` has no TLS, and a static bearer token is only as private as the channel under it; production deployments must put a TLS-terminating reverse proxy in front. The redirect fix is narrower: it stops Collider from sending the token to a host that was not the one it authenticated to.
 
 ## Provenance and signing
 
-A verified hash proves the bytes match what the lockfile recorded. It does not prove who produced them. Origin pinning narrows this: a locked package installs only from the repository URL it was locked against, which defeats the basic dependency-confusion swap of a public package for a private name. But the origin is a URL. It records where a package was fetched from, not who published it. If the repository at that URL is compromised, or the lockfile was generated against a poisoned index, the hashes still agree.
+A verified hash proves the bytes match what the lockfile recorded. It does not prove who produced them. Origin pinning narrows this: a locked package installs only from the repository URL it was locked against, which defeats the basic dependency-confusion swap of a public package for a private name. But the origin is a URL. It records where a package was fetched from, not who published it. If the repository at that URL is compromised, or the lockfile was generated against a poisoned index, the hashes still agree. When an offline install falls back to the cache, origin is lost: as the first post noted, the cache cannot tell which repository a wrap came from, so only the content hash holds there.
 
-Signing is the next item on the roadmap: a publisher signs the wrap and archive, and a consumer verifies the signature against a key it already trusts. Hashing proves the bytes have not changed since the lockfile was written. Signing would prove who wrote them.
+Signing is the next item on the roadmap: a publisher signs the wrap and archive, and a consumer verifies the signature against a key it already trusts. That ties a package to the holder of a trusted signing key, which a hash cannot.
 
 The rest of 1.3.0 (drift detection with `collider check`, prerelease resolution, a stricter publish archive) is in the [release notes](https://github.com/MaxandreOgeret/collider/releases/tag/1.3.0).
 
