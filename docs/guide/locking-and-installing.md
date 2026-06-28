@@ -116,6 +116,11 @@ Commands like `pkg add`, `pkg remove`, and `pkg upgrade` modify
 `collider.json` and the installed state but never touch `collider.lock`.
 The lockfile is only written by `collider lock`.
 
+The lockfile also scopes which wraps `collider setup` forces Meson to use: with
+a lockfile, only its managed packages (direct and transitive) are forced;
+without one, `setup` forces every present wrap as a best effort and warns. See
+[Wrap Fallback Enforcement](project-setup.md#wrap-fallback-enforcement).
+
 Per-dependency `include`, `exclude`, `include_conditional`, and
 `exclude_optional` in `collider.json` control transitive resolution:
 `include` and `exclude` are scoped to each root; `include_conditional` and

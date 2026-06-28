@@ -60,6 +60,14 @@ collider setup --builddir build
 collider setup -- --buildtype=debug
 ```
 
+`collider setup` forces Meson to use Collider's wraps for managed dependencies
+(via `--force-fallback-for`) so the build matches the locked versions rather
+than system copies. The forced set is scoped to `collider.lock` when present, or
+all wraps in `subprojects/` (with a warning) when it is absent; a malformed
+`collider.lock` aborts with `EX_DATAERR`. A user-supplied `--force-fallback-for`
+or `-Dforce_fallback_for` is honored as-is. See
+[Wrap Fallback Enforcement](../guide/project-setup.md#wrap-fallback-enforcement).
+
 ---
 
 ## `lock`
