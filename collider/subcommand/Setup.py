@@ -99,21 +99,21 @@ Examples:
 
         if not self.sourcedir.exists():
             logger.critical(f'Source directory "{self.sourcedir.absolute()}" does not exist')
-            return os.EX_DATAERR
+            return os.EX_NOINPUT
 
         if not (self.sourcedir / 'meson.build').exists():
             logger.critical(
                 f'No "meson.build" file found in "{self.sourcedir.absolute()}" '
                 '- not a valid Meson project'
             )
-            return os.EX_DATAERR
+            return os.EX_NOINPUT
 
         if not (self.sourcedir / Colliderfile.get_filename()).exists():
             logger.critical(
                 f'No "{Colliderfile.get_filename()}" file found in "{self.sourcedir.absolute()}" '
                 '- not a valid Collider project.'
             )
-            return os.EX_DATAERR
+            return os.EX_NOINPUT
 
         try:
             meson.setup(
