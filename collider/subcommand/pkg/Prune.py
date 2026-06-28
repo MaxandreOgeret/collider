@@ -101,6 +101,7 @@ def run_prune(context: Context, dry_run: bool = False) -> int:
             'Run "collider lock" to create ownership metadata for future operations; '
             'existing leftover wraps may still need to be removed manually.'
         )
+        logger.warning('prune skipped: no lockfile; run "collider lock"')
         return os.EX_OK
 
     try:

@@ -200,6 +200,7 @@ def test_prune_warns_without_lockfile(tmp_path: Path, caplog: pytest.LogCaptureF
     assert 'cannot safely determine which transitive wraps are orphaned' in caplog.text
     assert 'Run "collider lock" to create ownership metadata for future operations' in caplog.text
     assert 'may still need to be removed manually' in caplog.text
+    assert caplog.messages[-1] == 'prune skipped: no lockfile; run "collider lock"'
 
 
 def test_prune_warns_on_corrupt_lockfile(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
