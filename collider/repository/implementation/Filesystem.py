@@ -7,6 +7,7 @@ import io
 import json
 import shutil
 import urllib.parse
+import urllib.request
 
 from pathlib import Path
 from typing import Optional
@@ -59,7 +60,9 @@ class Filesystem(RepositoryInterface):
     ) -> 'RepositoryInterface':
         if publish_url is None:
             raise ValueError('Filesystem repositories require a publish_url.')
-        repo_path = Path(url.path)
+        # file:// URLs on Windows keep the drive letter in URL form, so convert the
+        # path component back into a native filesystem path before touching disk.
+        repo_path = Path(urllib.request.url2pathname(url.path))
         if not repo_path.exists() or not repo_path.is_dir():
             raise ValueError(f'Filesystem repository path "{repo_path.as_posix()}" does not exist.')
 

@@ -16,6 +16,9 @@ from collider.log import logger
 from collider.utils.fs import atomic_write_text
 
 
+_PROVIDE_LIST_KEYS = {'dependency_names', 'program_names'}
+
+
 def _load_wrap_section(
     wrap_text: str,
 ) -> tuple[configparser.ConfigParser, configparser.SectionProxy]:
@@ -35,7 +38,15 @@ def get_provide_names(wrap_text: str) -> list[str]:
     parser, _ = _load_wrap_section(wrap_text)
     if 'provide' not in parser:
         return []
-    return sorted(parser['provide'].keys())
+
+    provide_section = parser['provide']
+    provide_names: set[str] = set()
+    for key, value in provide_section.items():
+        if key in _PROVIDE_LIST_KEYS:
+            provide_names.update(name.strip() for name in value.split(',') if name.strip())
+        else:
+            provide_names.add(key)
+    return sorted(provide_names)
 
 
 @dataclass(frozen=True)

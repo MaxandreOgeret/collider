@@ -62,6 +62,31 @@ def test_filesystem_from_url_scans_existing_wraps(repo_path: Path):
     assert releases['foo']['dependency_names'] == ['bar', 'foo']
 
 
+def test_filesystem_from_url_expands_plural_provide_names(repo_path: Path) -> None:
+    """Filesystem scans expand plural [provide] keys into dependency names."""
+    wrap_dir = repo_path / 'foo_1.0.0'
+    wrap_dir.mkdir()
+    wrap_path = wrap_dir / 'foo.wrap'
+    wrap_path.write_text(
+        (
+            '[wrap-file]\n'
+            'source_url=https://example.com/foo.tar.xz\n'
+            'source_filename=foo.tar.xz\n'
+            'source_hash=deadbeef\n'
+            '\n'
+            '[provide]\n'
+            'dependency_names = foo, bar\n'
+            'program_names = baz\n'
+        ),
+        encoding='utf-8',
+    )
+
+    Filesystem.from_url(repo_path.as_uri(), publish_url=repo_path.as_uri())
+
+    releases = json.loads((repo_path / 'releases.json').read_text(encoding='utf-8'))
+    assert releases['foo']['dependency_names'] == ['bar', 'baz', 'foo']
+
+
 def test_filesystem_repo_add_get_remove(repo_path: Path):
     repo = Filesystem(repo_path, publish_url=repo_path.as_uri())
     package = WrapPackage.from_wrap_text('foo', '1.0.0', _wrap_text())
