@@ -5,14 +5,19 @@ Collider maintains a local cache so you can build without network access.
 ## Cache Location
 
 The cache lives at `~/.config/collider/cache/` (or
-`$XDG_CONFIG_HOME/collider/cache/`) and contains two directories:
+`$XDG_CONFIG_HOME/collider/cache/`) and includes:
 
-| Directory   | Contents                                              |
-|-------------|-------------------------------------------------------|
-| `wraps/`    | Wrap files, stored by package name and version.       |
-| `archives/` | Source and patch archives, keyed by content hash.     |
+| Directory   | Contents                                                     |
+|-------------|--------------------------------------------------------------|
+| `wraps/`    | Wrap files, stored by package name and version.              |
+| `archives/` | Source and patch archives, keyed by content hash.            |
+| `scans/`    | Cached Meson introspect scans (resolved dependency results). |
+| `wrapdb/`   | Cached `releases.json` per HTTP repository, with a 300s TTL. |
 
 Hash-keyed archive storage deduplicates identical content across packages.
+Each `wrapdb/` entry is keyed by the full repository URL (its host plus a hash
+of the URL), so repositories that share a host but differ by path do not
+collide.
 
 ## How the Cache is Populated
 
@@ -30,6 +35,17 @@ collider pkg upgrade --offline
 collider lock --offline
 collider install --offline
 ```
+
+!!! note "Releases cache prerequisite"
+    Offline use of an HTTP-backed repository (`wrap` or `collider` type) requires
+    that repository's `releases.json` to have been cached by a prior online
+    command. Without a cached copy, loading the repository fails with
+    `Offline mode requires cached wrap releases.`. This is not a clean hard-fail:
+    config loading catches the error, logs
+    `Failed to load repository "<name>": ...`, and skips
+    the repository. The failure surfaces downstream instead, for example as
+    `No package matching query` with exit code `EX_UNAVAILABLE` when no other
+    repository can satisfy the request. Filesystem repositories are unaffected.
 
 In offline mode, Collider:
 

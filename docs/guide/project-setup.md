@@ -12,8 +12,8 @@ This creates a `collider.json` file with an empty dependency list. Collider
 refuses to initialize outside a Meson project.
 
 If your `meson.build` `project()` call has no `license:` field, `collider init`
-emits a warning at setup time, because a missing license causes warnings on
-every `collider publish`. Add it now to avoid the noise later:
+emits a non-fatal warning during the init run. The same missing license also
+warns on every `collider setup`. Add it now to avoid the noise later:
 
 ```meson
 project('mylib', 'cpp', version: '1.0.0', license: 'MIT')
@@ -36,11 +36,20 @@ It declares project metadata and dependencies:
 
 Each dependency has:
 
-| Field       | Required | Description                                                  |
-|-------------|----------|--------------------------------------------------------------|
-| `name`      | Yes      | Package name as it appears in the repository.                |
-| `source`    | Yes      | Either `"system"` or `"collider"`.                           |
-| `version`   | No       | A PEP 440 version constraint such as `>=1.2,<2.0`.          |
+| Field                 | Required | Description                                                |
+|-----------------------|----------|------------------------------------------------------------|
+| `name`                | Yes      | Package name as it appears in the repository.              |
+| `source`              | Yes      | Either `"system"` or `"collider"`.                         |
+| `version`             | No       | A PEP 440 version constraint such as `>=1.2,<2.0`.         |
+| `include`             | No       | Array of transitive dependency names to force resolve.     |
+| `exclude`             | No       | Array of transitive dependency names to skip.              |
+| `include_conditional` | No       | Boolean. Also resolve conditional transitive dependencies. |
+| `exclude_optional`    | No       | Boolean. Skip optional transitive dependencies.            |
+
+The last four fields apply only to the transitive resolution of the dependency
+they are declared on. See
+[Including or Excluding Specific Dependencies](managing-packages.md#including-or-excluding-specific-dependencies)
+for the matching `collider pkg add` flags and their precedence.
 
 System dependencies are not managed by Collider. They document that the
 project expects a system-installed library. Only `"collider"` dependencies are

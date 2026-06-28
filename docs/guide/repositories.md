@@ -109,7 +109,7 @@ repo/
   archives/
     my-lib_1.2.0/
       my-lib-1.2.0.tar.xz
-      my-lib-1.2.0.patch
+      my-lib_1.2.0_patch.tar.xz
 ```
 
 `releases.json` is regenerated on every publish or unpublish to keep the

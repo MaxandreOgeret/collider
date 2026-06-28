@@ -20,7 +20,7 @@ This post explains how it works under the hood and what design decisions it make
 
 ## The wrap format: what we start with
 
-A Meson `.wrap` file is an TOML config that tells Meson where to get a source archive and (optionally) a patch archive:
+A Meson `.wrap` file is an INI-format config that tells Meson where to get a source archive and (optionally) a patch archive:
 
 ```ini
 [wrap-file]

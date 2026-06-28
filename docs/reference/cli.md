@@ -9,6 +9,18 @@ collider [-v] [--offline] <command> [options]
 
 Use `collider <command> --help` for command-specific help.
 
+### Global Options
+
+| Option            | Description                                                        |
+|-------------------|--------------------------------------------------------------------|
+| `-v`, `--verbose` | Enable verbose (DEBUG) logging.                                    |
+| `--offline`       | Disable network access and rely on the local cache where possible. |
+| `-h`, `--help`    | Show the help message and exit.                                    |
+
+As noted above, global options must precede the subcommand. The effective
+offline mode is the global `--offline` OR the per-command `--offline`: passing
+either one is enough.
+
 ---
 
 ## `init`
@@ -199,13 +211,15 @@ collider pkg add <name> [--version SPEC] [--offline] [--force]
 | Option               | Description                                              |
 |----------------------|----------------------------------------------------------|
 | `<name>`             | Package name.                                            |
-| `--version SPEC`     | Version constraint (e.g. `>=1.2,<2.0`).                  |
+| `--version`, `-v` `SPEC` | Version constraint (e.g. `>=1.2,<2.0`).             |
 | `--offline`          | Resolve from cache only.                                 |
-| `--force`            | Reinstall even if the package is already installed.      |
+| `--force`, `-f`      | Reinstall even if the package is already installed.      |
 | `--include PKG`      | Force-include a transitive dependency by name (repeatable). |
 | `--exclude PKG`      | Skip a transitive dependency by name (repeatable).       |
 | `--include-conditional` | Also resolve dependencies inside Meson `if` blocks.  |
 | `--exclude-optional` | Skip optional (`required: false`) dependencies.          |
+
+Alias: `collider pkg install`
 
 Fails if the package is already installed unless `--force` is given. If the wrap is installed only as a transitive dependency, `pkg add` promotes it into `collider.json` without reinstalling it. Does not update `collider.lock`.
 
@@ -265,8 +279,8 @@ collider pkg search <pattern> [--cache] [--repository NAME] ... [--version SPEC]
 |---------------------|------------------------------------------------------|
 | `<pattern>`         | Regular expression matched against package names.    |
 | `--cache`           | Search only cached wraps without accessing repositories. |
-| `--repository NAME` | Restrict search to specific repositories (repeatable). |
-| `--version SPEC`    | Filter by version constraint.                        |
+| `--repository`, `-r` `NAME` | Restrict search to specific repositories (repeatable). |
+| `--version`, `-v` `SPEC` | Filter by version constraint.                   |
 
 ---
 
@@ -278,10 +292,12 @@ Show versions, origins, and cache status for a package.
 collider pkg info <name> [--repository NAME] ...
 ```
 
+Alias: `collider pkg policy`
+
 | Option              | Description                                          |
 |---------------------|------------------------------------------------------|
 | `<name>`            | Package name.                                        |
-| `--repository NAME` | Restrict to specific repositories (repeatable).      |
+| `--repository`, `-r` `NAME` | Restrict to specific repositories (repeatable). |
 
 ---
 
@@ -296,7 +312,7 @@ collider pkg upgrade [<name>] [--version SPEC] [--offline]
 | Option          | Description                                              |
 |-----------------|----------------------------------------------------------|
 | `<name>`        | Package to upgrade. Omit to upgrade all.                 |
-| `--version SPEC`| New version constraint (only valid with a package name). |
+| `--version`, `-v` `SPEC` | New version constraint (only valid with a package name). |
 | `--offline`     | Resolve from cache only.                                 |
 
 Does not update `collider.lock`.
@@ -366,3 +382,25 @@ collider serve <path> [--host HOST] [--port PORT]
 | `--push-token-env VAR`| Environment variable holding the push token.             |
 
 Push routes are disabled unless a push token is configured.
+
+---
+
+## Exit Codes
+
+Subcommands return `os.EX_*` codes from the standard `os` module. The two
+non-`EX_*` codes come from the CLI wrapper and argparse.
+
+| Code | Name             | Meaning                                                                                      |
+|------|------------------|----------------------------------------------------------------------------------------------|
+| 0    | `EX_OK`          | Success.                                                                                     |
+| 1    | --               | Uncaught exception (likely a Collider bug).                                                  |
+| 2    | --               | Argparse usage error (unknown command or bad arguments).                                     |
+| 64   | `EX_USAGE`       | Command-line usage error.                                                                    |
+| 65   | `EX_DATAERR`     | Invalid input data: drift, bad version, or wrap hash mismatch.                               |
+| 66   | `EX_NOINPUT`     | Required input missing: no `meson.build`, `collider.json`, or lockfile.                      |
+| 69   | `EX_UNAVAILABLE` | A dependency is unavailable: network, resolution, or Meson.                                  |
+| 70   | `EX_SOFTWARE`    | Subprocess failure, such as `meson setup` exiting non-zero.                                  |
+| 73   | `EX_CANTCREAT`   | Output target could not be created, e.g. the package version already exists.                 |
+| 74   | `EX_IOERR`       | I/O error reading or writing files or repositories.                                          |
+| 77   | `EX_NOPERM`      | Permission denied, such as a rejected push token.                                            |
+| 78   | `EX_CONFIG`      | Configuration error: a locked origin repository is not configured or its URL does not match. |
