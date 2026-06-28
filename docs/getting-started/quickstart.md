@@ -81,8 +81,11 @@ collider pkg add zlib --version '>=1.2,<2.0'
 collider setup
 ```
 
-This runs Meson setup with the collider-managed subprojects in place. Pass
-extra Meson arguments after `--`:
+This runs Meson setup with the collider-managed subprojects in place, forcing
+Meson to use Collider's wraps instead of system copies. Until you create
+`collider.lock` in the next step, it forces all wraps and prints a warning;
+`collider lock` then makes the scope authoritative. Pass extra Meson arguments
+after `--`:
 
 ```bash
 collider setup -- --buildtype=debug

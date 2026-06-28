@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import configparser
 import shutil
 
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing import Optional
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import Lockfile
 from collider.log import logger
+from collider.Package import get_provide_names
 from collider.utils.meson import SUBPROJECTS_DIR
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 
@@ -82,6 +84,78 @@ def scan_wraps(subprojects_dir: Path) -> list[str]:
     if not subprojects_dir.exists():
         return []
     return [p.stem for p in subprojects_dir.glob('*.wrap') if p.is_file()]
+
+
+def managed_package_names(sourcedir: Path) -> Optional[set[str]]:
+    """
+    Return collider's authoritative managed package set, or None when it is unknown.
+    The lockfile is the only record of transitive installs, so a present collider.lock
+    yields the precise set (direct + transitive) plus the colliderfile's direct entries.
+    None signals the caller to fall back to wrap presence, since before a lock exists a
+    transitive wrap is recorded nowhere but the wrap file itself.
+    :param sourcedir: Project source directory.
+    :return: Managed package names, or None when collider.lock is absent.
+    :raises ValueError: When collider.lock exists but cannot be parsed.
+    """
+    lock_path = sourcedir / Lockfile.get_filename()
+    if not lock_path.exists():
+        return None
+
+    try:
+        lockfile = Lockfile.from_path(lock_path)
+    except Exception as exc:
+        raise ValueError(f'collider.lock is malformed: {exc}') from exc
+
+    names = set(lockfile.all_packages)
+
+    # Cover direct deps added since the last lock; the lockfile owns transitive ones.
+    colliderfile_path = sourcedir / Colliderfile.get_filename()
+    if colliderfile_path.exists():
+        try:
+            colliderfile = Colliderfile.from_path(colliderfile_path)
+        except Exception as exc:
+            # The lockfile is authoritative; a broken colliderfile is caught later by setup
+            # validation. Scope to lock-only names here rather than abort.
+            logger.debug(f'Ignoring unreadable collider.json for force-fallback scoping: {exc}')
+            return names
+        names |= {
+            dep.name for dep in colliderfile.dependencies if dep.source == DependencySource.COLLIDER
+        }
+    return names
+
+
+def collect_force_fallback_names(
+    subprojects_dir: Path, managed: Optional[set[str]] = None
+) -> list[str]:
+    """
+    Collect the names to force to wrap fallback at `meson setup`.
+    Each in-scope wrap contributes its stem (the subproject name) and any names it declares
+    in [provide], so Meson uses collider's wraps instead of system copies and the build
+    matches the locked versions. Both forms independently force the fallback, and reading
+    [provide] keeps the catch2/catch2-with-main dependency-name vs package-name mismatch
+    correct. When ``managed`` is given, only wraps for those collider-managed packages are
+    forced; when it is None (no lockfile yet), every present wrap is forced as a best effort.
+    :param subprojects_dir: Path to the subprojects directory.
+    :param managed: Collider-managed package names to restrict forcing to, or None.
+    :return: Sorted, de-duplicated names for `meson setup --force-fallback-for`.
+    """
+    if not subprojects_dir.exists():
+        return []
+
+    names: set[str] = set()
+    for wrap_path in subprojects_dir.glob('*.wrap'):
+        if not wrap_path.is_file():
+            continue
+        if managed is not None and wrap_path.stem not in managed:
+            continue
+        names.add(wrap_path.stem)
+        try:
+            names.update(get_provide_names(wrap_path.read_text(encoding='utf-8')))
+        except (ValueError, OSError, configparser.Error):
+            # Redirect/git or malformed wraps lack a parseable [wrap-file]; the stem alone
+            # still forces the subproject.
+            continue
+    return sorted(names)
 
 
 def warn_if_lockfile_needs_refresh(package_name: str) -> None:
