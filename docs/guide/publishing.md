@@ -70,9 +70,13 @@ Use `collider unpublish` to remove the existing version before re-publishing.
 
 ## The `[provide]` Section
 
-Collider auto-generates the wrap `[provide]` entry as `<name> = <name>_dep`,
-replacing `-` and `.` with `_`. Ensure your Meson project exposes that
-dependency variable so `dependency()` fallbacks work.
+Collider auto-generates the wrap `[provide]` entry as `<name> = <variable>`,
+where the dependency variable is derived from the package name: every character
+not in `[A-Za-z0-9_]` is replaced with `_`, and if the result does not begin
+with a letter or underscore (for example a leading digit) an underscore is
+prepended, then `_dep` is appended. This yields a valid Meson identifier. Ensure
+your Meson project exposes that dependency variable so `dependency()` fallbacks
+work.
 
 ## Publishing with a Patch
 
@@ -93,13 +97,14 @@ the committed diff.
 
 Options:
 
-| Flag                         | Description                                      |
-|------------------------------|--------------------------------------------------|
-| `--base REV`                 | Git revision to diff against (default: HEAD).    |
-| `--include-uncommitted`      | Include staged, unstaged, and untracked files (default). |
-| `--no-include-uncommitted`   | Exclude working tree changes; archive only the committed diff from `--base`. |
-| `--output PATH`              | Custom output path for the patch archive.        |
-| `--list`                     | Dry-run: list files that would be included.      |
+| Flag                       | Description                                                                    |
+|----------------------------|--------------------------------------------------------------------------------|
+| `--builddir PATH`          | Meson build directory used to read project metadata (default: collider-build). |
+| `--base REV`               | Git revision to diff against (default: HEAD).                                  |
+| `--include-uncommitted`    | Include staged, unstaged, and untracked files (default).                       |
+| `--no-include-uncommitted` | Exclude working tree changes; archive only the committed diff from `--base`.   |
+| `--output PATH`            | Custom output path for the patch archive.                                      |
+| `--list`                   | Dry-run: list files that would be included.                                    |
 
 #### Empty Changeset
 
@@ -111,9 +116,13 @@ full command.
 #### Deleted Files
 
 Deleted files cannot be included in a Meson wrap patch because wrap patches
-cannot remove files cleanly. If the diff contains a deleted file, `collider
-patch` exits with an error. Commit the deletion upstream or use `--exclude`
-to omit it from the patch.
+cannot remove files cleanly. Any deletion aborts the patch, including the delete
+half of a rename (with `--no-renames`, a rename surfaces as a deletion of the
+old path plus an addition of the new one). To proceed, commit the deletion
+upstream so it lands as a normal committed change, or remove the deleted path
+from the change set before running `collider patch`. There is no per-file
+exclude flag; `--no-include-uncommitted` only excludes the entire working tree,
+which is a blunt scope change rather than a way to drop a single deletion.
 
 ### 2. Publish with the Patch
 

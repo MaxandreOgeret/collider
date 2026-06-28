@@ -14,7 +14,17 @@ This resolves all dependencies declared in `collider.json` - including
 their transitive dependencies - and writes `collider.lock`. All declared
 dependencies are resolved in a single pass so that cross-root conflicts
 (e.g. two packages requiring incompatible versions of the same transitive
-dependency) are detected and reported. The lockfile has two sections:
+dependency) are detected and reported.
+
+Transitive resolution requires repositories to advertise the dependency names
+each package provides: the `dependency_names` field in `releases.json`,
+populated from the `[provide]` section keys of each wrap. Without that index
+Collider cannot map a scanned Meson dependency back to a package, so it
+resolves only the dependencies declared directly in `collider.json` (each to
+the newest version matching its constraint) and treats unmapped dependencies
+as system-provided.
+
+The lockfile has two sections:
 
 - **`dependencies`**: Direct dependencies (from `collider.json`). Each entry has `version`, `wrap_hash`, and `origin`.
 - **`packages`**: Transitive dependencies only. Same entry shape.
@@ -50,7 +60,9 @@ When `collider.lock` exists, `install` restores all packages from it:
 
 If no lockfile exists, Collider falls back to resolving from `collider.json`
 (including transitive dependencies) without writing a lockfile. Like `lock`,
-this uses unified multi-root resolution to detect cross-root conflicts.
+this uses unified multi-root resolution to detect cross-root conflicts, and
+the same transitive-resolution caveat applies: without the repository
+`dependency_names` index, only declared direct dependencies are resolved.
 
 ### Hash Verification
 

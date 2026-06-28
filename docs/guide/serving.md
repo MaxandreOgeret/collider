@@ -21,7 +21,7 @@ If the directory does not exist, Collider creates the repository layout
 | `--port PORT`       | Bind port (default: `8000`).                             |
 | `--publish-url URL` | Base URL for archive URLs in wraps. Defaults to the repository path as a local `file://` URL. |
 | `--push-token TOKEN`       | Static bearer token for push auth.                |
-| `--push-token-env VAR`     | Environment variable holding the push token.      |
+| `--push-token-env VAR`     | Environment variable holding the push token (default: `COLLIDER_PUSH_TOKEN`). |
 
 ## Exposed Endpoints
 
@@ -37,18 +37,23 @@ Any other path returns `404 Not Found`.
 
 ## Push Authentication
 
-By default, the push endpoint is disabled. Enable it by configuring a token:
+The push and delete endpoints auto-enable whenever a token is available.
+`--push-token-env` defaults to `COLLIDER_PUSH_TOKEN`, so an exported
+`COLLIDER_PUSH_TOKEN` enables them with no extra flags:
+
+```bash
+export COLLIDER_PUSH_TOKEN=my-secret
+collider serve /path/to/repo
+```
+
+You can also pass the token inline instead:
 
 ```bash
 collider serve /path/to/repo --push-token my-secret
 ```
 
-Or read the token from an environment variable:
-
-```bash
-export COLLIDER_PUSH_TOKEN=my-secret
-collider serve /path/to/repo --push-token-env COLLIDER_PUSH_TOKEN
-```
+The endpoints are disabled only when neither `--push-token` nor the
+`COLLIDER_PUSH_TOKEN` environment variable is present.
 
 When enabled, the server exposes:
 

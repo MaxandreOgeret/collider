@@ -57,6 +57,14 @@ JSON payload:
   provided together.
 - `source_filename` and `patch_filename` must match the values in `wrap_text`.
 
+Response codes:
+
+- Returns `201 Created` on success.
+- Returns `409 Conflict` if the version already exists.
+- Returns `400 Bad Request` for an invalid or incomplete payload.
+- Returns `413 Payload Too Large` if the request body exceeds 128 MiB.
+- Returns `401 Unauthorized` for a missing or invalid bearer token.
+
 #### Unpublish
 
 ```
@@ -146,4 +154,10 @@ When served at `publish_url`:
 |----------------|-----------------------------------------------------------|
 | Package index  | `<publish_url>/v2/releases.json`                          |
 | Wrap file      | `<publish_url>/v2/<name>_<version>/<name>.wrap`           |
-| Archive        | `<publish_url>/v2/archives/<name>_<version>/<filename>`   |
+| Archive        | `<publish_url>/archives/<name>_<version>/<filename>`      |
+
+The Archive row is the URL embedded in published wraps as `source_url` and
+`patch_url`, so it has no `/v2/` prefix and matches the example wrap above. The
+`releases.json` and wrap file rows are HTTP serve routes, which Collider serves
+under `/v2/`, as is the `/v2/archives/` read endpoint listed above. The embedded
+archive URL is separate from that read route and resolves against `publish_url`.

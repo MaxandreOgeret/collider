@@ -35,13 +35,13 @@ When no repository provides this mapping, only the direct package is installed.
 
 By default, Collider applies the following rules to scanned dependencies:
 
-| Condition | Behavior |
-|-----------|----------|
-| Required dependency | Included automatically. |
-| Optional dependency (`required: false`) | Included with an info message. |
-| Conditional dependency (inside an `if` block) | Excluded. A summary of all skipped conditional deps is shown. |
-| Well-known system dependency (`threads`, `openmp`, etc.) | Silently skipped. |
-| Not found in any configured repository | Skipped (assumed system dependency). Each unknown name is reported once. |
+| Condition                                                | Behavior                                                                                                                |
+|----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| Required dependency                                      | Included automatically.                                                                                                 |
+| Optional dependency (`required: false`)                  | Included with an info message.                                                                                          |
+| Conditional dependency (inside an `if` block)            | Excluded. A summary of skipped conditional deps is shown (entries already satisfied by a resolved package are omitted). |
+| Well-known system dependency (`threads`, `openmp`, etc.) | Silently skipped.                                                                                                       |
+| Not found in any configured repository                   | Skipped (assumed system dependency). Each unknown name is reported once.                                                |
 
 If transitive resolution fails after the direct package has been installed,
 Collider rolls back the direct package (removes its `.wrap` and cached

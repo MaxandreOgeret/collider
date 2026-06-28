@@ -41,7 +41,7 @@ nav = [
     { Design = "development/design.md" },
     { Contributing = "development/contributing.md" },
   ] },
-  { bBlog = ["blog/index.md"] },
+  { Blog = ["blog/index.md"] },
 ]
 
 markdown_extensions = [

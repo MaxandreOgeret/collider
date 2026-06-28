@@ -21,10 +21,16 @@ You can also write it by hand:
   "description": "Example Meson library",
   "dependencies": [
     { "name": "fmt", "source": "system" },
-    { "name": "my-lib", "source": "collider", "version": ">=1.2.0" }
+    { "name": "zlib", "source": "collider", "version": ">=1.2.0" }
   ]
 }
 ```
+
+The two `source` values mean different things. A `source: "system"` dependency
+is hand-declared and unmanaged: Collider does not install it, and you provide
+it from your system or environment. A `source: "collider"` dependency is
+managed by Collider, which installs it and records the entry when you run
+`collider pkg add`.
 
 ## 2. Configure a Repository
 
@@ -52,19 +58,21 @@ collider repo list
 ## 3. Add a Dependency
 
 ```bash
-collider pkg add my-lib
+collider pkg add zlib
 ```
 
-Collider resolves the newest available version, installs the wrap file into
-`subprojects/`, and populates `subprojects/packagecache/` for offline builds.
-If the package has transitive dependencies, Collider installs them
-automatically. (To add a package from WrapDB such as `fmt`, use
-`collider pkg add fmt` and it will be added as a collider dependency.)
+Collider resolves the newest available version from a configured repository
+such as WrapDB, installs the wrap file into `subprojects/`, and populates
+`subprojects/packagecache/` for offline builds. The package is recorded in
+`collider.json` as a `source: "collider"` (managed) dependency. If the package
+has transitive dependencies, Collider installs them automatically. If no
+matching package is found, the command reports an error and exits without
+modifying your project.
 
 To pin a version range:
 
 ```bash
-collider pkg add my-lib --version '>=1.2,<2.0'
+collider pkg add zlib --version '>=1.2,<2.0'
 ```
 
 ## 4. Configure the Meson Build
@@ -93,17 +101,21 @@ The lockfile (`collider.lock`) records exact versions and wrap hashes so that
 
 ## 6. Publish a Package
 
-After building your project, publish it to a repository:
+Publish reads the project name and version from Meson introspection, so it
+needs the build directory created by `collider setup` (step 4, default
+`collider-build`). You do not need to compile first.
 
 ```bash
 collider publish local
 ```
 
-The package name and version are read from Meson introspection. Collider
-generates the source archive and wrap file and stores them in the repository.
+Collider generates the source archive and wrap file and stores them in the
+repository. Point publish at a different build with `--builddir`.
 
 ## Next Steps
 
 - [Project Setup](../guide/project-setup.md): detailed `collider.json` and `collider setup` usage
 - [Managing Packages](../guide/managing-packages.md): add, remove, upgrade, search
 - [Repositories](../guide/repositories.md): repository types and configuration
+- [Locking and Installing](../guide/locking-and-installing.md): reproducible installs with `collider.lock`
+- [Publishing](../guide/publishing.md): packaging and distributing your project

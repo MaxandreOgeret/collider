@@ -11,6 +11,13 @@ against `collider.json`. It reports two classes of issues:
 The command exits `0` when clean and non-zero when drift is detected, making it
 suitable for CI gates.
 
+## Exit Codes
+
+- `0` (`EX_OK`): no drift detected.
+- `65` (`EX_DATAERR`): drift detected (untracked or stale entries).
+- `66` (`EX_NOINPUT`): no `meson.build` or no `collider.json` found in the
+  source directory.
+
 ## Basic Usage
 
 Run from the project root:
@@ -34,6 +41,10 @@ because their resolution depends on the build configuration. Pass
 ```bash
 collider check --include-conditional
 ```
+
+This flag only affects the untracked check. Stale detection always uses the raw
+scan of every `dependency()` call, so a `collider.json` entry used only inside an
+`if`-block is never flagged stale, regardless of the flag.
 
 ## Known Limitation
 

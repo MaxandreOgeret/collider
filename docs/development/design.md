@@ -24,7 +24,7 @@
 
 ### Filesystem Repository
 
-Stores wraps and optional archives on disk. Generates `releases.json` for WrapDB compatibility when served over HTTP(S).
+Stores wraps and optional archives on disk. Regenerates `releases.json` from the repository layout on every add/remove (independent of whether the repository is served), keeping it WrapDB-compatible.
 
 **Layout**
 
@@ -44,11 +44,13 @@ Patch archives may use any extension; `collider patch` produces `.tar.xz` by def
 
 **URL Mapping**
 
-| Resource      | URL                                                     |
-|---------------|---------------------------------------------------------|
-| releases.json | `<publish_url>/v2/releases.json`                        |
-| wrap file     | `<publish_url>/v2/<name>_<version>/<name>.wrap`         |
-| archive file  | `<publish_url>/v2/archives/<name>_<version>/<filename>` |
+| Resource      | URL                                                   |
+|---------------|-------------------------------------------------------|
+| releases.json | `<repo_url>/v2/releases.json`                         |
+| wrap file     | `<repo_url>/v2/<name>_<version>/<name>.wrap`          |
+| archive file  | `<publish_url>/archives/<name>_<version>/<filename>`  |
+
+`releases.json` and wrap URLs are derived consumer-side from the repository base URL, with `/v2` appended automatically. Archive URLs are different: they are built directly from `publish_url` with no `/v2` inserted. When archives are served over HTTP by `collider serve`, they are exposed only under `/v2/archives/...`, so in that case `publish_url` must include the `/v2` prefix to resolve there. Local `file://` archive URLs (the `serve` default) are read directly from disk and need no prefix.
 
 ### Wrap Repository (Remote)
 
@@ -64,10 +66,10 @@ Extends the WrapDB read API with two write endpoints under a `_collider` namespa
 
 **Write Endpoints**
 
-| Method | Path                                              | Purpose             |
-|--------|----------------------------------------------------|---------------------|
-| POST   | `<base>/v2/_collider/v1/push`                      | Publish a package.  |
-| DELETE | `<base>/v2/_collider/v1/packages/<name>/<version>` | Unpublish a package.|
+| Method | Path                                               | Purpose              |
+|--------|----------------------------------------------------|----------------------|
+| POST   | `<base>/v2/_collider/v1/push`                      | Publish a package.   |
+| DELETE | `<base>/v2/_collider/v1/packages/<name>/<version>` | Unpublish a package. |
 
 - Both endpoints require `Authorization: Bearer <token>`.
 - The push payload is a single JSON object containing the wrap text, source archive (base64-encoded), and optional patch archive.
@@ -163,7 +165,15 @@ Removes a repository entry from `config.json` by name. Fails with `EX_NOINPUT` w
 - Optional write extension at `POST /v2/_collider/v1/push` when push auth is configured.
 - Push auth is intentionally minimal (static bearer token). Strong auth should be handled externally.
 
-### `search`
+### `unpublish`
+
+- Removes a package version from a repository: `collider unpublish <repo> <name> <version>`.
+- Supported for `filesystem` and `collider` repositories only; `wrap` (read-only) repositories return `EX_USAGE`.
+- Filesystem: deletes the wrap and staged archives from disk and regenerates `releases.json`.
+- Collider remote: issues `DELETE /v2/_collider/v1/packages/<name>/<version>`; the bearer token is read from the env var named by `--push-token-env`.
+- Returns `EX_NOINPUT` when the repository or package is not found.
+
+### `pkg search`
 
 Searches configured repositories by name and optional version constraint.
 
@@ -181,6 +191,15 @@ Searches configured repositories by name and optional version constraint.
 - Shows transitive dependencies from `collider.lock`, or re-resolves them from `collider.json` when no lockfile is present and repository metadata is available.
 - Highlights wrap files present in `subprojects/` but not tracked by Collider.
 - When `collider.lock` exists, reports lock drift per dependency: `ok`, `modified`, or `missing`.
+
+### `check`
+
+- Detects drift between the `dependency()` calls scanned from `meson.build` and the dependencies declared in `collider.json`.
+- Reports untracked dependencies (present in `meson.build` but absent from `collider.json`) and stale entries (declared in `collider.json` but absent from `meson.build`).
+- Scans the source directory (`--sourcedir`, default: current directory); `--include-conditional` also considers dependencies inside Meson `if` blocks.
+- Exits `EX_DATAERR` when any drift is found, `EX_OK` when clean. Missing `meson.build` returns `EX_NOINPUT`.
+
+**Rationale.** Provides a non-mutating CI gate that flags a `collider.json` out of sync with the actual build.
 
 ### `pkg add`
 
@@ -230,6 +249,8 @@ Searches configured repositories by name and optional version constraint.
 - Cache root: `~/.config/collider/cache/`.
 - `wraps/` caches wrap files by name+version.
 - `archives/` caches archives by hash.
+- `scans/` caches dependency scan results by name+version.
+- `wrapdb/` caches fetched `releases.json` per remote repository.
 - Offline mode forbids network access but allows local `file://` archives.
 
 **Rationale**
@@ -269,7 +290,7 @@ Searches configured repositories by name and optional version constraint.
 
 ### `config.json`
 
-- List of repositories (`filesystem`, `wrap`).
+- List of repositories (`filesystem`, `wrap`, `collider`).
 - Filesystem repositories require `publish_url` for hosted archive rewrites.
 
 ### `releases.json`
@@ -433,7 +454,7 @@ If transitive resolution fails after the direct package has been installed, `pkg
 
 `pkg remove` is conservative: it always deletes the direct dependency from `collider.json`, but it only removes the installed wrap/subproject directory when Collider can prove the package is no longer needed. If another direct dependency still requires it transitively, or if re-resolution fails and Collider cannot determine safety, the installed wrap is left in place. This guarantees that manually placed wraps and potentially shared dependencies are never accidentally deleted.
 
-Transitive cleanup is handled by a separate `pkg prune` command (also invoked via `pkg remove --prune`). Prune requires a lockfile for provenance — `collider.lock` defines which wraps are Collider-managed. Without a lockfile, prune warns and does nothing. When a lockfile is present, prune loads the managed package set, re-resolves all remaining `collider.json` dependencies to compute the "needed" set, and removes wraps that are managed but no longer needed. If a transitive dep is shared with another direct dependency, it is kept. Wraps not listed in the lockfile (manually placed) are never removed. A `--dry-run` flag allows previewing removals without deleting. Prune resolves conservatively: unlike install, lock, and status, it always includes conditional dependencies and never excludes optional ones, because the safety requirement is to never delete a wrap that might still be needed. Successful prune operations do not rewrite `collider.lock`; instead they warn that the lockfile should be refreshed with `collider lock`.
+Transitive cleanup is handled by a separate `pkg prune` command (also invoked via `pkg remove --prune`). Prune requires a lockfile for provenance: `collider.lock` defines which wraps are Collider-managed. Without a lockfile, prune warns and does nothing. When a lockfile is present, prune loads the managed package set, re-resolves all remaining `collider.json` dependencies to compute the "needed" set, and removes wraps that are managed but no longer needed. If a transitive dep is shared with another direct dependency, it is kept. Wraps not listed in the lockfile (manually placed) are never removed. A `--dry-run` flag allows previewing removals without deleting. Prune resolves conservatively: unlike install, lock, and status, it always includes conditional dependencies and never excludes optional ones, because the safety requirement is to never delete a wrap that might still be needed. Successful prune operations do not rewrite `collider.lock`; instead they warn that the lockfile should be refreshed with `collider lock`.
 
 ### Offline Transitive Resolution
 
@@ -455,7 +476,7 @@ When `--offline` is set and a repository requires network access, the resolver c
 
 ### Limitations
 
-- `--scan-dependencies` scans a single `meson.build` file. Projects that use `subdir()` to split `dependency()` calls across multiple files may produce incomplete scan results. For most WrapDB packages this is not an issue because patches typically consist of a single `meson.build`.
+- `--scan-dependencies` runs static AST analysis with no build directory or configure step. It follows `subdir()` recursively from the project root `meson.build`, so multi-file projects that split `dependency()` calls across subdirectories are scanned fully. The residual limitation is that values resolved only at configure time (for example a `subdir()` path computed from a build option) are not evaluated.
 - Rollback on transitive failure only removes the direct package. If some transitive dependencies were already installed before the failure, they are left in place. This is a known limitation that avoids accidentally removing wraps that may be shared with other packages.
 
 **Rationale**
