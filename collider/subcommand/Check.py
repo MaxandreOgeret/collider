@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import os
 
 from pathlib import Path
@@ -13,10 +14,12 @@ from pathlib import Path
 from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
 from collider.log import logger
+from collider.Package import get_provide_names
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.meson.scan import filter_dependencies, scan_dependencies
 from collider.utils.packaging.Dependency import DependencySource
+from collider.utils.packaging.resolver import build_dep_name_index
 
 
 _DEFAULT_SOURCE_DIR = Path('.')
@@ -38,7 +41,9 @@ class Check(SubcommandInterface):
             'Scan meson.build for dependency() calls and compare against collider.json.\n'
             'Reports untracked dependencies (in meson.build but not in collider.json) and\n'
             'stale entries (in collider.json but absent from meson.build).\n\n'
-            'Assumes the dependency() name in meson.build matches the collider package name.\n'
+            'Resolves dependency() names through installed wrap provides and repository\n'
+            'metadata so package aliases (e.g. catch2 providing catch2-with-main) are not\n'
+            'mistaken for drift.\n'
             'Exits with EX_DATAERR when drift is found, EX_OK when clean.'
         )
 
@@ -93,6 +98,8 @@ class Check(SubcommandInterface):
         scanned = scan_dependencies(meson_build)
         filtered = filter_dependencies(scanned, include_conditional=self.include_conditional)
 
+        dep_name_index = self._build_dependency_name_index()
+
         # Stale check uses the raw scan so conditional deps are not falsely flagged.
         scanned_all_names = {dep.name for dep in scanned}
         scanned_included_names = {dep.name for dep in filtered.included}
@@ -101,8 +108,21 @@ class Check(SubcommandInterface):
             dep.name for dep in colliderfile.dependencies if dep.source == DependencySource.COLLIDER
         }
 
-        untracked = sorted(scanned_included_names - collider_names)
-        stale = sorted(managed_names - scanned_all_names)
+        # A scanned dependency is covered when its own name or its owning package is tracked;
+        # resolution only rescues aliases the user has not already tracked directly.
+        untracked = sorted(
+            {
+                dep_name_index.get(name, name)
+                for name in scanned_included_names
+                if name not in collider_names
+                and dep_name_index.get(name, name) not in collider_names
+            }
+        )
+        # A managed package is used when it is scanned directly or a dependency resolves to it.
+        used_names = scanned_all_names | {
+            dep_name_index.get(name, name) for name in scanned_all_names
+        }
+        stale = sorted(managed_names - used_names)
 
         for name in untracked:
             logger.error(
@@ -117,3 +137,32 @@ class Check(SubcommandInterface):
 
         logger.info('No drift detected.')
         return os.EX_OK
+
+    def _build_dependency_name_index(self) -> dict[str, str]:
+        """
+        Map Meson dependency() names to their owning collider package name.
+        Installed wrap [provide] aliases take precedence over repository metadata, which only
+        fills gaps for packages whose wrap is not present in the local subprojects directory.
+        :return: Mapping from dependency name to collider package name.
+        """
+        index: dict[str, str] = {}
+
+        subprojects_dir = self.sourcedir / 'subprojects'
+        if subprojects_dir.exists():
+            for wrap_path in subprojects_dir.glob('*.wrap'):
+                if not wrap_path.is_file():
+                    continue
+                package_name = wrap_path.stem
+                index.setdefault(package_name, package_name)
+                try:
+                    provide_names = get_provide_names(wrap_path.read_text(encoding='utf-8'))
+                except (ValueError, OSError, configparser.Error):
+                    continue
+                for provide_name in provide_names:
+                    index.setdefault(provide_name, package_name)
+
+        repos = dict(self.context.config.repositories.items())
+        for name, package_name in build_dep_name_index(repos).items():
+            index.setdefault(name, package_name)
+
+        return index
