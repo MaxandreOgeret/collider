@@ -19,4 +19,4 @@ Brief description of the change.
 ## AI disclosure
 
 - [ ] AI tools were used for part or all of this change.
-  - [ ] A **human** -- not an AI agent -- has reviewed every line, understands the change, and takes full responsibility for what is submitted.
+  - [ ] A **human** (not an AI agent) has reviewed every line, understands the change, and takes full responsibility for what is submitted.
