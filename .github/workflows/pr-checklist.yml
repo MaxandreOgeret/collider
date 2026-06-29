@@ -19,8 +19,9 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -uo pipefail
-          # True when a TICKED checkbox line contains the given phrase (case-insensitive).
-          checked() { printf '%s\n' "$PR_BODY" | grep -iE '^[[:space:]]*-[[:space:]]*\[[xX]\]' | grep -qi "$1"; }
+          # The phrases below must match the checkbox text in .github/PULL_REQUEST_TEMPLATE.md.
+          # True when a TICKED checkbox line (- or * bullet) contains the given phrase (case-insensitive).
+          checked() { printf '%s\n' "$PR_BODY" | grep -iE '^[[:space:]]*[-*][[:space:]]*\[[xX]\]' | grep -qi "$1"; }
           fail=0
 
           if checked "contributing guidelines"; then
