@@ -13,10 +13,12 @@ from pathlib import Path
 from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
 from collider.log import logger
+from collider.Package import get_provide_names
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.meson.scan import filter_dependencies, scan_dependencies
 from collider.utils.packaging.Dependency import DependencySource
+from collider.utils.packaging.resolver import build_dep_name_index
 
 
 _DEFAULT_SOURCE_DIR = Path('.')
@@ -38,7 +40,8 @@ class Check(SubcommandInterface):
             'Scan meson.build for dependency() calls and compare against collider.json.\n'
             'Reports untracked dependencies (in meson.build but not in collider.json) and\n'
             'stale entries (in collider.json but absent from meson.build).\n\n'
-            'Assumes the dependency() name in meson.build matches the collider package name.\n'
+            'Resolves dependency() names through installed wrap provides and repository\n'
+            'metadata when available.\n'
             'Exits with EX_DATAERR when drift is found, EX_OK when clean.'
         )
 
@@ -93,6 +96,8 @@ class Check(SubcommandInterface):
         scanned = scan_dependencies(meson_build)
         filtered = filter_dependencies(scanned, include_conditional=self.include_conditional)
 
+        dep_name_index = self._build_dependency_name_index()
+
         # Stale check uses the raw scan so conditional deps are not falsely flagged.
         scanned_all_names = {dep.name for dep in scanned}
         scanned_included_names = {dep.name for dep in filtered.included}
@@ -101,8 +106,13 @@ class Check(SubcommandInterface):
             dep.name for dep in colliderfile.dependencies if dep.source == DependencySource.COLLIDER
         }
 
-        untracked = sorted(scanned_included_names - collider_names)
-        stale = sorted(managed_names - scanned_all_names)
+        resolved_scanned_names = {dep_name_index.get(name, name) for name in scanned_all_names}
+        untracked = sorted(
+            name
+            for name in scanned_included_names
+            if dep_name_index.get(name, name) not in collider_names
+        )
+        stale = sorted(managed_names - resolved_scanned_names)
 
         for name in untracked:
             logger.error(
@@ -117,3 +127,29 @@ class Check(SubcommandInterface):
 
         logger.info('No drift detected.')
         return os.EX_OK
+
+    def _build_dependency_name_index(self) -> dict[str, str]:
+        """Resolve Meson dependency names to collider package names when possible."""
+        dep_name_index: dict[str, str] = {}
+
+        subprojects_dir = self.sourcedir / 'subprojects'
+        if subprojects_dir.exists():
+            for wrap_path in subprojects_dir.glob('*.wrap'):
+                package_name = wrap_path.stem
+                dep_name_index.setdefault(package_name, package_name)
+                try:
+                    provide_names = get_provide_names(wrap_path.read_text(encoding='utf-8'))
+                except Exception:
+                    continue
+                for provide_name in provide_names:
+                    dep_name_index.setdefault(provide_name, package_name)
+
+        repos = dict(getattr(self.context.config, 'repositories', {}).items())
+        dep_name_index.update(
+            {
+                name: package_name
+                for name, package_name in build_dep_name_index(repos).items()
+                if name not in dep_name_index
+            }
+        )
+        return dep_name_index

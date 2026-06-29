@@ -13,6 +13,19 @@ import pytest
 from _pytest.fixtures import SubRequest
 
 
+_POSIX_EXIT_CODES = {
+    'EX_OK': 0,
+    'EX_USAGE': 64,
+    'EX_DATAERR': 65,
+    'EX_NOINPUT': 66,
+    'EX_UNAVAILABLE': 69,
+    'EX_IOERR': 74,
+}
+
+for _name, _value in _POSIX_EXIT_CODES.items():
+    if not hasattr(os, _name):
+        setattr(os, _name, _value)
+
 MESON_PROJECTS = ['header', 'none', 'shared']
 
 
