@@ -28,6 +28,7 @@ from collider.utils.packaging.resolver import (
 )
 from collider.utils.project_state import (
     load_colliderfile,
+    read_lockfile,
     remove_installed_artifacts,
     scan_wraps,
 )
@@ -103,10 +104,8 @@ def run_prune(context: Context, dry_run: bool = False) -> int:
         )
         return os.EX_OK
 
-    try:
-        lockfile = Lockfile.from_path(lockfile_path)
-    except Exception:
-        logger.warning('collider.lock could not be read. Run "collider lock" to regenerate it.')
+    lockfile = read_lockfile(lockfile_path)
+    if lockfile is None:
         return os.EX_OK
 
     managed = set(lockfile.all_packages.keys())

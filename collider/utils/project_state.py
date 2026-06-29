@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 
 from pathlib import Path
@@ -20,6 +21,28 @@ from collider.utils.packaging.Dependency import Dependency, DependencySource
 def load_colliderfile() -> Colliderfile:
     """Load collider.json from the current project root."""
     return Colliderfile.from_path(Path.cwd() / Colliderfile.get_filename())
+
+
+def read_lockfile(lockfile_path: Path, *, warn_on_error: bool = True) -> Optional[Lockfile]:
+    """
+    Read collider.lock with explicit diagnostics for parse and IO failures.
+    :param lockfile_path: Path to collider.lock.
+    :param warn_on_error: When True, log a warning before returning None.
+    :return: Loaded lockfile, or None when the file is missing or unreadable.
+    """
+    try:
+        with open(lockfile_path, 'r', encoding='UTF-8') as lockfile_stream:
+            return Lockfile.from_stream(lockfile_stream)
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
+        if warn_on_error:
+            logger.warning('collider.lock could not be read. Run "collider lock" to regenerate it.')
+    except OSError as exc:
+        if warn_on_error:
+            logger.warning(
+                f'Could not read collider.lock: {exc}. Run "collider lock" to regenerate it.'
+            )
+
+    return None
 
 
 def find_collider_dependency(colliderfile: Colliderfile, package_name: str) -> Optional[Dependency]:
@@ -90,9 +113,8 @@ def warn_if_lockfile_needs_refresh(package_name: str) -> None:
     if not lockfile_path.exists():
         return
 
-    try:
-        lockfile = Lockfile.from_path(lockfile_path)
-    except Exception:
+    lockfile = read_lockfile(lockfile_path, warn_on_error=False)
+    if lockfile is None:
         return
 
     if package_name in lockfile.all_packages:

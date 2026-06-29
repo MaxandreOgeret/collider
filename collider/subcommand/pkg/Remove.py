@@ -31,6 +31,7 @@ from collider.utils.packaging.resolver import (
 from collider.utils.project_state import (
     find_collider_dependency,
     load_colliderfile,
+    read_lockfile,
     remove_collider_dependency,
     remove_installed_artifacts,
     scan_wraps,
@@ -236,9 +237,8 @@ class Remove(SubcommandInterface):
             )
             return
 
-        try:
-            lockfile = Lockfile.from_path(lockfile_path)
-        except Exception:
+        lockfile = read_lockfile(lockfile_path)
+        if lockfile is None:
             logger.info(
                 'Additional wraps remain in subprojects/. Collider cannot safely '
                 'determine which are orphaned without existing ownership metadata. '
