@@ -263,7 +263,15 @@ class Filesystem(RepositoryInterface):
                 if not version:
                     logger.debug(f'Skipping wrap "{wrap_path.name}" with missing version.')
                     continue
-                provide_names = get_provide_names(wrap_path.read_text(encoding='utf-8')) or None
+                wrap_text = wrap_path.read_text(encoding='utf-8')
+                try:
+                    # Published packages must be wrap-file based; reject git/redirect wraps loudly
+                    # rather than scanning them into a broken releases.json entry.
+                    _load_wrap_section(wrap_text)
+                except ValueError:
+                    logger.error(f'Skipping non-wrap-file package wrap "{wrap_path.name}".')
+                    continue
+                provide_names = get_provide_names(wrap_text) or None
                 add_wrap_entry(packages, name, version, provide_names)
         return packages
 
