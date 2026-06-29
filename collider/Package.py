@@ -16,13 +16,19 @@ from collider.log import logger
 from collider.utils.fs import atomic_write_text
 
 
+def _parse_wrap(wrap_text: str) -> configparser.ConfigParser:
+    """Parse wrap text with the case-sensitive, interpolation-free options wraps require."""
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str  # ty: ignore[invalid-assignment]
+    parser.read_string(wrap_text)
+    return parser
+
+
 def _load_wrap_section(
     wrap_text: str,
 ) -> tuple[configparser.ConfigParser, configparser.SectionProxy]:
     """Parse wrap text once so validation rules stay consistent."""
-    parser = configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str  # ty: ignore[invalid-assignment]
-    parser.read_string(wrap_text)
+    parser = _parse_wrap(wrap_text)
 
     if 'wrap-file' not in parser:
         raise ValueError('Unsupported wrap file format. Expected [wrap-file] section.')
@@ -31,11 +37,27 @@ def _load_wrap_section(
 
 
 def get_provide_names(wrap_text: str) -> list[str]:
-    """Extract provided dependency names from a wrap file."""
-    parser, _ = _load_wrap_section(wrap_text)
+    """
+    Extract provided dependency names from a wrap file, regardless of wrap type.
+    The [provide] section is valid in any wrap kind, so this does not require [wrap-file].
+    Meson's reserved ``dependency_names`` key holds a comma-separated list, ``program_names``
+    holds find_program() entries (not dependency() names), and every other key is itself a
+    provided dependency name.
+    :param wrap_text: Raw wrap file contents.
+    :return: Sorted, de-duplicated provided dependency names.
+    """
+    parser = _parse_wrap(wrap_text)
     if 'provide' not in parser:
         return []
-    return sorted(parser['provide'].keys())
+    names: set[str] = set()
+    for key, value in parser['provide'].items():
+        if key == 'dependency_names':
+            names.update(name.strip() for name in value.split(',') if name.strip())
+        elif key == 'program_names':
+            continue
+        else:
+            names.add(key)
+    return sorted(names)
 
 
 @dataclass(frozen=True)

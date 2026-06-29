@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from collider.Package import WrapPackage
+from collider.Package import WrapPackage, get_provide_names
 
 
 def test_wrap_package_install_writes_wrap_file(tmp_path: Path):
@@ -101,3 +101,31 @@ def test_wrap_package_warns_http_urls(caplog):
     pkg = WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
     assert pkg.source_url == 'http://example.com/foo.tar.xz'
     assert 'HTTP source URLs are allowed but insecure' in caplog.text
+
+
+def test_get_provide_names_returns_named_provide_keys():
+    wrap_text = (
+        '[wrap-file]\nsource_url=x\n\n[provide]\ncatch2 = catch2_dep\ncatch2-with-main = m\n'
+    )
+    assert get_provide_names(wrap_text) == ['catch2', 'catch2-with-main']
+
+
+def test_get_provide_names_expands_reserved_dependency_names():
+    wrap_text = (
+        '[wrap-file]\nsource_url=x\n\n[provide]\ndependency_names = catch2-with-main, catch2\n'
+    )
+    assert get_provide_names(wrap_text) == ['catch2', 'catch2-with-main']
+
+
+def test_get_provide_names_excludes_program_names():
+    wrap_text = '[wrap-file]\nsource_url=x\n\n[provide]\nfoo = foo_dep\nprogram_names = cmake\n'
+    assert get_provide_names(wrap_text) == ['foo']
+
+
+def test_get_provide_names_reads_git_wrap_provide():
+    wrap_text = '[wrap-git]\nurl=https://example.invalid/foo.git\n\n[provide]\nfoo = foo_dep\n'
+    assert get_provide_names(wrap_text) == ['foo']
+
+
+def test_get_provide_names_without_provide_section_returns_empty():
+    assert get_provide_names('[wrap-git]\nurl=https://example.invalid/foo.git\n') == []

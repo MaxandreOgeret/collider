@@ -80,6 +80,21 @@ def test_collect_non_wrap_file_uses_stem_only(tmp_path: Path) -> None:
     assert collect_force_fallback_names(subprojects) == ['mydep']
 
 
+def test_collect_git_wrap_with_provide_includes_aliases(tmp_path: Path) -> None:
+    """A git/redirect wrap carrying a [provide] section forces both its stem and its aliases."""
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(
+        subprojects,
+        'catch2',
+        '[wrap-git]\n'
+        'url = https://example.invalid/catch2.git\n'
+        'revision = head\n'
+        '\n[provide]\n'
+        'catch2-with-main = catch2_with_main_dep\n',
+    )
+    assert collect_force_fallback_names(subprojects) == ['catch2', 'catch2-with-main']
+
+
 def test_collect_malformed_ini_wrap_uses_stem_only(tmp_path: Path) -> None:
     """A wrap that is not parseable INI (no section header) is tolerated; the stem forces it."""
     subprojects = tmp_path / 'subprojects'

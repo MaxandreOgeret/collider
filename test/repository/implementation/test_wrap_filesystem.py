@@ -62,6 +62,22 @@ def test_filesystem_from_url_scans_existing_wraps(repo_path: Path):
     assert releases['foo']['dependency_names'] == ['bar', 'foo']
 
 
+def test_filesystem_scan_skips_non_wrap_file_package(repo_path: Path, caplog):
+    wrap_dir = repo_path / 'foo_1.0.0'
+    wrap_dir.mkdir()
+    (wrap_dir / 'foo.wrap').write_text(
+        '[wrap-git]\nurl=https://example.invalid/foo.git\nrevision=head\n', encoding='utf-8'
+    )
+
+    caplog.set_level('ERROR')
+    repo = Filesystem.from_url(repo_path.as_uri(), publish_url=repo_path.as_uri())
+
+    assert repo.packages == {}
+    assert 'Skipping non-wrap-file package wrap "foo.wrap".' in caplog.text
+    releases = json.loads((repo_path / 'releases.json').read_text(encoding='utf-8'))
+    assert releases == {}
+
+
 def test_filesystem_repo_add_get_remove(repo_path: Path):
     repo = Filesystem(repo_path, publish_url=repo_path.as_uri())
     package = WrapPackage.from_wrap_text('foo', '1.0.0', _wrap_text())
