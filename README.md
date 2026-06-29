@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://collider.ee/assets/logo.svg" width="300">
+<img src="https://collider.ee/latest/assets/logo.svg" width="300">
 </p>
 
 <p align="center">
@@ -77,18 +77,18 @@ collider setup                                                  # configure the 
 collider lock                                                   # write collider.lock for reproducible installs
 ```
 
-See the [Quick Start guide](https://collider.ee/getting-started/quickstart/) for
+See the [Quick Start guide](https://collider.ee/latest/getting-started/quickstart/) for
 a full walkthrough.
 
 ## Documentation
 
 Full documentation lives at [collider.ee](https://collider.ee):
 
-- [Getting started](https://collider.ee/getting-started/quickstart/): install and first steps.
-- [User guide](https://collider.ee/guide/project-setup/): managing packages, repositories, publishing, locking, offline mode, and serving.
-- [Configuration](https://collider.ee/reference/configuration/): `config.json`, `collider.json`, and `collider.lock`.
-- [CLI reference](https://collider.ee/reference/cli/): every command, flag, and exit code.
-- [Contributing](https://collider.ee/development/contributing/): development setup and pull request checks.
+- [Getting started](https://collider.ee/latest/getting-started/quickstart/): install and first steps.
+- [User guide](https://collider.ee/latest/guide/project-setup/): managing packages, repositories, publishing, locking, offline mode, and serving.
+- [Configuration](https://collider.ee/latest/reference/configuration/): `config.json`, `collider.json`, and `collider.lock`.
+- [CLI reference](https://collider.ee/latest/reference/cli/): every command, flag, and exit code.
+- [Contributing](https://collider.ee/latest/development/contributing/): development setup and pull request checks.
 
 ## License
 

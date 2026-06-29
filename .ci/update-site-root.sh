@@ -85,3 +85,13 @@ EOF
 if [[ -n "$latest" && -f "$WEB_ROOT/$latest/404.html" ]]; then
   cp "$WEB_ROOT/$latest/404.html" "$WEB_ROOT/404.html"
 fi
+
+# Maintain a stable /latest/ alias pointing at the newest release so external links (README, etc.)
+# never go stale across releases. It serves the same pages as /<latest>/, whose canonical URLs point
+# back at the versioned path, so search engines consolidate there. The scan above ignores it (not a
+# semver dir, not the dev dir), so it never appears as a version.
+if [[ -n "$latest" ]]; then
+  ln -sfn "$latest" "$WEB_ROOT/latest"
+else
+  rm -f "$WEB_ROOT/latest"
+fi
