@@ -1,5 +1,4 @@
 ---
-hide_from_nav: true
 hide:
  - toc
 ---

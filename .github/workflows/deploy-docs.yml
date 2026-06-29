@@ -3,6 +3,7 @@ name: deploy-docs
 on:
   push:
     branches: [main]
+    tags: ['*.*.*']
   workflow_dispatch:
 
 concurrency:
@@ -22,14 +23,46 @@ jobs:
       DOCS_DEPLOY_PORT: ${{ vars.DOCS_DEPLOY_PORT || '22' }}
       DOCS_DEPLOY_REPO_DIR: ${{ vars.DOCS_DEPLOY_REPO_DIR || '/collider-app' }}
       DOCS_DEPLOY_WEB_ROOT: ${{ vars.DOCS_DEPLOY_WEB_ROOT || '/var/www/collider' }}
-      DOCS_DEPLOY_BRANCH: ${{ vars.DOCS_DEPLOY_BRANCH || 'main' }}
       DOCS_DEPLOY_WEB_GROUP: ${{ vars.DOCS_DEPLOY_WEB_GROUP || 'caddy' }}
       DOCS_DEPLOY_KNOWN_HOSTS: ${{ vars.DOCS_DEPLOY_KNOWN_HOSTS }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Resolve deploy target
+        id: target
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # A semver tag deploys that release into /<version>/; a branch build (main) goes into
+          # /<branch>/ as the development version. Non-semver tags (e.g. release candidates) are
+          # skipped so they never orphan a subdir the switcher cannot list.
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            if [[ ! "$REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Tag '$REF_NAME' is not a release version; skipping docs deploy."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            {
+              echo "deploy_ref=$REF_NAME"
+              echo "deploy_subdir=$REF_NAME"
+              echo "is_release=true"
+            } >> "$GITHUB_OUTPUT"
+          else
+            # A branch build is the development version, served at /<branch>/ and labelled with the
+            # branch name (e.g. main).
+            {
+              echo "deploy_ref=$REF_NAME"
+              echo "deploy_subdir=$REF_NAME"
+              echo "is_release=false"
+            } >> "$GITHUB_OUTPUT"
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       - name: Validate deploy configuration
+        if: ${{ steps.target.outputs.skip != 'true' }}
         run: |
           test -n "$DOCS_DEPLOY_HOST"
           test -n "$DOCS_DEPLOY_USER"
@@ -38,28 +71,40 @@ jobs:
           test -n "$DOCS_DEPLOY_KNOWN_HOSTS"
 
       - name: Load deploy key
+        if: ${{ steps.target.outputs.skip != 'true' }}
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DOCS_DEPLOY_SSH_KEY }}
 
       - name: Add pinned server host key
+        if: ${{ steps.target.outputs.skip != 'true' }}
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$DOCS_DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Deploy docs on server
+        if: ${{ steps.target.outputs.skip != 'true' }}
+        env:
+          DEPLOY_REF: ${{ steps.target.outputs.deploy_ref }}
+          DEPLOY_SUBDIR: ${{ steps.target.outputs.deploy_subdir }}
+          IS_RELEASE: ${{ steps.target.outputs.is_release }}
+          DEV_SUBDIR: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           cat .ci/deploy-docs.sh | ssh -p "$DOCS_DEPLOY_PORT" "$DOCS_DEPLOY_USER@$DOCS_DEPLOY_HOST" \
             "sudo -n -u collider env \
              REPO_DIR='$DOCS_DEPLOY_REPO_DIR' \
-             DEPLOY_BRANCH='$DOCS_DEPLOY_BRANCH' \
+             DEPLOY_REF='$DEPLOY_REF' \
+             DEPLOY_SUBDIR='$DEPLOY_SUBDIR' \
+             DEV_SUBDIR='$DEV_SUBDIR' \
+             IS_RELEASE='$IS_RELEASE' \
              WEB_ROOT='$DOCS_DEPLOY_WEB_ROOT' \
              WEB_GROUP='$DOCS_DEPLOY_WEB_GROUP' \
              bash -s"
 
       - name: Restart collider repo service
+        if: ${{ steps.target.outputs.skip != 'true' }}
         run: |
           set -eu
           ssh -p "$DOCS_DEPLOY_PORT" "$DOCS_DEPLOY_USER@$DOCS_DEPLOY_HOST" \

@@ -4,7 +4,7 @@
 [project]
 site_name = "Collider"
 site_description = "A package and dependency manager for Meson projects."
-site_url = "https://maxandreogeret.github.io/collider/"
+site_url = "https://collider.ee/"
 site_author = "Maxandre Ogeret"
 repo_url = "https://github.com/MaxandreOgeret/collider"
 repo_name = "MaxandreOgeret/collider"
@@ -12,6 +12,7 @@ copyright = """
 Copyright &copy; 2026 <a href="https://mogrobotics.com/legal/">MOG Robotics OÜ</a>
 """
 extra_css = ["assets/extra.css"]
+extra_javascript = ["assets/version-select.js"]
 [project.extra]
 github_repo = "MaxandreOgeret/collider"
 
@@ -41,7 +42,6 @@ nav = [
     { Design = "development/design.md" },
     { Contributing = "development/contributing.md" },
   ] },
-  { Blog = ["blog/index.md"] },
 ]
 
 markdown_extensions = [

@@ -1,5 +1,4 @@
 ---
-hide_from_nav: true
 hide:
  - toc
 ---
@@ -7,7 +6,7 @@ hide:
 # Building a Package Manager on Top of Meson's Wrap System
 
 <p style="display: flex; align-items: center; justify-content: center; gap: 1rem;">
-  <img src="https://collider.ee/assets/logo.svg" alt="Collider logo" style="height: 121px; width: auto;" />
+  <img src="/blog/assets/logo.svg" alt="Collider logo" style="height: 121px; width: auto;" />
   <span style="font-size: 3rem; line-height: 1;">&amp;</span>
   <img src="https://mesonbuild.com/assets/images/meson_logo.png" alt="Meson logo" style="height: 121px; width: auto;" />
 </p>
