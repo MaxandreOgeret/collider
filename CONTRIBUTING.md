@@ -43,9 +43,9 @@ time focused on genuine contributions:
 
 - **Disclose** in the pull request whether AI tools were used for any part of the
   change.
-- If AI was used, a **human must fully review every line**, understand it, and take
-  **full responsibility** for its correctness, security, and quality -- the same as
-  if it had been written by hand.
+- If AI was used, a **human -- not the AI agent that produced the change -- must
+  review every line**, understand it, and take **full responsibility** for its
+  correctness, security, and quality, the same as if it had been written by hand.
 - Pull requests that appear to be unreviewed machine output, or that do not disclose
   AI use, may be closed without further review.
 
