@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 MOG Robotics OÜ.
 
+import logging
 import threading
+import urllib.parse
 import urllib.request
 
 from functools import partial
@@ -9,7 +11,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from collider.utils.network import _AuthStrippingRedirectHandler, safe_urlopen
+from collider.utils.network import (
+    _AuthStrippingRedirectHandler,
+    may_send_push_token,
+    safe_urlopen,
+)
 
 
 def _make_request(url: str) -> urllib.request.Request:
@@ -119,3 +125,27 @@ def test_safe_urlopen_keeps_token_on_same_origin_redirect():
     finally:
         server.shutdown()
         thread.join()
+
+
+def test_may_send_push_token_allows_https():
+    url = urllib.parse.urlparse('https://packages.example.com/v2/')
+
+    assert may_send_push_token(url, insecure=False) is True
+
+
+def test_may_send_push_token_refuses_http_without_insecure(caplog):
+    url = urllib.parse.urlparse('http://packages.example.com/v2/')
+
+    with caplog.at_level(logging.CRITICAL, logger='collider'):
+        assert may_send_push_token(url, insecure=False) is False
+
+    assert 'Refusing to send the push token' in caplog.text
+
+
+def test_may_send_push_token_allows_http_with_insecure(caplog):
+    url = urllib.parse.urlparse('http://packages.example.com/v2/')
+
+    with caplog.at_level(logging.WARNING, logger='collider'):
+        assert may_send_push_token(url, insecure=True) is True
+
+    assert 'insecure' in caplog.text.lower()

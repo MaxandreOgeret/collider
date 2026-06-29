@@ -135,7 +135,7 @@ Generate a wrap and source archive, then publish to a repository.
 
 ```bash
 collider publish <repo> [--builddir PATH] [--patch-archive PATH]
-                        [--push-token-env VAR] [--dry-run]
+                        [--push-token-env VAR] [--insecure] [--dry-run]
 ```
 
 | Option                | Description                                              |
@@ -144,6 +144,7 @@ collider publish <repo> [--builddir PATH] [--patch-archive PATH]
 | `--builddir PATH`     | Meson build directory (default: `collider-build`).       |
 | `--patch-archive PATH`| Attach a patch archive to the published package.         |
 | `--push-token-env VAR`| Environment variable holding the bearer token (default: `COLLIDER_PUSH_TOKEN`). |
+| `--insecure`          | Allow pushing to a non-`https` repository, sending the token in cleartext. |
 | `--dry-run`           | Validate and package without writing to the repository.  |
 
 ---
@@ -153,7 +154,7 @@ collider publish <repo> [--builddir PATH] [--patch-archive PATH]
 Remove a package version from a repository.
 
 ```bash
-collider unpublish <repo> <package> <version> [--push-token-env VAR]
+collider unpublish <repo> <package> <version> [--push-token-env VAR] [--insecure]
 ```
 
 | Option                | Description                                              |
@@ -162,6 +163,7 @@ collider unpublish <repo> <package> <version> [--push-token-env VAR]
 | `<package>`           | Package name.                                            |
 | `<version>`           | Version to remove.                                       |
 | `--push-token-env VAR`| Environment variable holding the bearer token.           |
+| `--insecure`          | Allow deleting from a non-`https` repository, sending the token in cleartext. |
 
 ---
 

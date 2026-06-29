@@ -93,6 +93,7 @@ def _push_args(
     patch_archive: Path | None = None,
     push_token_env: str = 'COLLIDER_PUSH_TOKEN',
     dry_run: bool = False,
+    insecure: bool = False,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         repository=repository,
@@ -100,6 +101,7 @@ def _push_args(
         patch_archive=patch_archive,
         push_token_env=push_token_env,
         dry_run=dry_run,
+        insecure=insecure,
     )
 
 
@@ -348,7 +350,7 @@ def test_push_collider_repo_http_success(tmp_path: Path) -> None:
         context = MagicMock(spec=Context)
         context.config = config
 
-        cmd = Publish(_push_args(repository='remote', builddir=builddir), context)
+        cmd = Publish(_push_args(repository='remote', builddir=builddir, insecure=True), context)
         with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
             assert cmd.execute() == os.EX_OK
     finally:
@@ -380,7 +382,7 @@ def test_push_collider_repo_http_bad_token(tmp_path: Path) -> None:
         context = MagicMock(spec=Context)
         context.config = config
 
-        cmd = Publish(_push_args(repository='remote', builddir=builddir), context)
+        cmd = Publish(_push_args(repository='remote', builddir=builddir, insecure=True), context)
         with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'wrong'}):
             assert cmd.execute() == os.EX_IOERR
     finally:
@@ -408,7 +410,12 @@ def test_push_collider_repo_uses_custom_token_env(tmp_path: Path) -> None:
         context.config = config
 
         cmd = Publish(
-            _push_args(repository='remote', builddir=builddir, push_token_env='MY_PUSH_TOKEN'),
+            _push_args(
+                repository='remote',
+                builddir=builddir,
+                insecure=True,
+                push_token_env='MY_PUSH_TOKEN',
+            ),
             context,
         )
         with patch.dict(os.environ, {'MY_PUSH_TOKEN': 'secret'}, clear=True):
@@ -433,7 +440,7 @@ def test_push_collider_repo_http_unreachable_endpoint(tmp_path: Path) -> None:
     context = MagicMock(spec=Context)
     context.config = config
 
-    cmd = Publish(_push_args(repository='remote', builddir=builddir), context)
+    cmd = Publish(_push_args(repository='remote', builddir=builddir, insecure=True), context)
     with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
         assert cmd.execute() == os.EX_IOERR
 
@@ -490,7 +497,7 @@ def test_push_collider_repo_http_conflict_returns_ex_cantcreat(tmp_path: Path, c
         context = MagicMock(spec=Context)
         context.config = config
 
-        args = _push_args(repository='remote', builddir=builddir)
+        args = _push_args(repository='remote', builddir=builddir, insecure=True)
         with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
             assert Publish(args, context).execute() == os.EX_OK
 
@@ -535,7 +542,7 @@ def test_push_collider_repo_http_unexpected_status(tmp_path: Path) -> None:
         context = MagicMock(spec=Context)
         context.config = config
 
-        cmd = Publish(_push_args(repository='remote', builddir=builddir), context)
+        cmd = Publish(_push_args(repository='remote', builddir=builddir, insecure=True), context)
         with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
             assert cmd.execute() == os.EX_IOERR
     finally:
@@ -611,3 +618,26 @@ def test_dry_run_collider_repo_does_not_push(tmp_path: Path, caplog) -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_push_collider_repo_http_refused_without_insecure(tmp_path: Path, caplog) -> None:
+    """Pushing a token to an http repo without --insecure is refused before any network call."""
+    source_dir = tmp_path / 'src'
+    source_dir.mkdir()
+    builddir = tmp_path / 'build'
+    _write_projectinfo(builddir, name='demo', version='1.0.0')
+    _write_mesoninfo(builddir, source_dir)
+
+    # Unreachable port: had the gate not fired, the push would attempt a connection and return
+    # EX_IOERR. EX_USAGE proves the token was never put on the wire.
+    closed_port = _unused_localhost_port()
+    collider_repo = Collider(urllib.parse.urlparse(f'http://127.0.0.1:{closed_port}/v2/'), {})
+    config = MagicMock()
+    config.repositories = {'remote': collider_repo}
+    context = MagicMock(spec=Context)
+    context.config = config
+
+    cmd = Publish(_push_args(repository='remote', builddir=builddir), context)
+    with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
+        assert cmd.execute() == os.EX_USAGE
+    assert 'Refusing to send the push token' in caplog.text

@@ -231,6 +231,7 @@ def test_delete_execute_collider_success(tmp_path: Path) -> None:
             package='foo',
             version='1.0.0',
             push_token_env='COLLIDER_PUSH_TOKEN',
+            insecure=True,
         )
         cmd = Unpublish(args, context)
 
@@ -550,3 +551,23 @@ def test_delete_execute_collider_empty_push_token_env_name_returns_ex_usage(
     assert exit_code == os.EX_USAGE
     assert 'Push token env var name must not be empty.' in caplog.text
     assert '--push-token-env' in caplog.text
+
+
+def test_delete_collider_http_refused_without_insecure(tmp_path: Path, caplog) -> None:
+    """Deleting with a token over http without --insecure is refused before any network call."""
+    collider_repo = Collider(urllib.parse.urlparse('http://packages.example.com/v2/'), {})
+    config = MagicMock()
+    config.repositories = {'remote': collider_repo}
+    context = MagicMock(spec=Context)
+    context.config = config
+
+    args = argparse.Namespace(
+        repository='remote',
+        package='foo',
+        version='1.0.0',
+        push_token_env='COLLIDER_PUSH_TOKEN',
+    )
+    cmd = Unpublish(args, context)
+    with patch.dict(os.environ, {'COLLIDER_PUSH_TOKEN': 'secret'}):
+        assert cmd.execute() == os.EX_USAGE
+    assert 'Refusing to send the push token' in caplog.text
