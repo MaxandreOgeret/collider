@@ -3,6 +3,8 @@ name: deploy-docs
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 concurrency:
@@ -28,6 +30,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+
+      - name: Read docs version
+        id: docs_version
+        run: |
+          version=$(python - <<'PY'
+from pathlib import Path
+import tomllib
+
+data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
+print(data['project']['version'])
+PY
+)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Validate deploy configuration
         run: |
@@ -51,10 +68,25 @@ jobs:
       - name: Deploy docs on server
         run: |
           set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ]; then
+            deploy_version="${{ github.event.release.tag_name }}"
+            deploy_aliases="latest"
+            deploy_ref="${{ github.event.release.tag_name }}"
+            checkout_mode="tag"
+          else
+            deploy_version="${{ steps.docs_version.outputs.version }}"
+            deploy_aliases="dev"
+            deploy_ref="origin/${DOCS_DEPLOY_BRANCH}"
+            checkout_mode="branch"
+          fi
           cat .ci/deploy-docs.sh | ssh -p "$DOCS_DEPLOY_PORT" "$DOCS_DEPLOY_USER@$DOCS_DEPLOY_HOST" \
             "sudo -n -u collider env \
              REPO_DIR='$DOCS_DEPLOY_REPO_DIR' \
              DEPLOY_BRANCH='$DOCS_DEPLOY_BRANCH' \
+             DOCS_DEPLOY_REF='$deploy_ref' \
+             DOCS_DEPLOY_CHECKOUT_MODE='$checkout_mode' \
+             DOCS_DEPLOY_VERSION='$deploy_version' \
+             DOCS_DEPLOY_ALIASES='$deploy_aliases' \
              WEB_ROOT='$DOCS_DEPLOY_WEB_ROOT' \
              WEB_GROUP='$DOCS_DEPLOY_WEB_GROUP' \
              bash -s"
