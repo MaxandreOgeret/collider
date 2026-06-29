@@ -1,0 +1,47 @@
+name: pr-checklist
+
+# Soft barrier: confirm the PR template's required boxes are ticked. Re-runs when the description
+# is edited so ticking a box clears the check. Maintainers can still override by editing the boxes.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  checklist:
+    if: ${{ github.actor != 'nektos/act' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify checklist and AI disclosure
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -uo pipefail
+          # True when a TICKED checkbox line contains the given phrase (case-insensitive).
+          checked() { printf '%s\n' "$PR_BODY" | grep -iE '^[[:space:]]*-[[:space:]]*\[[xX]\]' | grep -qi "$1"; }
+          fail=0
+
+          if checked "contributing guidelines"; then
+            echo "OK: contributing guidelines acknowledged."
+          else
+            echo "::error::Please tick the box confirming you have read the contributing guidelines."
+            fail=1
+          fi
+
+          # The disclosure is honor-system; but if AI use IS disclosed, the human-responsibility
+          # attestation becomes mandatory.
+          if checked "AI tools were used"; then
+            echo "AI use disclosed."
+            if checked "full responsibility"; then
+              echo "OK: human review and responsibility attested."
+            else
+              echo "::error::You disclosed AI use -- also tick the box confirming a human reviewed every line and takes full responsibility."
+              fail=1
+            fi
+          else
+            echo "No AI use disclosed."
+          fi
+
+          exit "$fail"
