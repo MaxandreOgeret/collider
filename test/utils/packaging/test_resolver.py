@@ -23,6 +23,7 @@ from collider.utils.packaging.resolver import (
     RootSpec,
     _filter_satisfied_skips,
     _group_by_package,
+    _ProgressReporter,
     build_dep_name_index,
     resolve_all_dependencies,
     resolve_dependencies,
@@ -1612,3 +1613,26 @@ def test_resolve_dependencies_filters_satisfied_skips() -> None:
     assert 'abseil-cpp' in result.mapping
     assert result.summary.skipped_conditional == set()
     assert result.summary.skipped_conditional_by_pkg == {}
+
+
+@pytest.mark.parametrize('disable', [True, False])
+def test_progress_reporter_forwards_disable_to_tqdm(disable: bool) -> None:
+    """The resolution progress bar is created with the disable flag it was given."""
+    with patch('collider.utils.packaging.resolver.tqdm') as mock_tqdm:
+        _ProgressReporter(disable=disable).starting()
+
+    assert mock_tqdm.call_args.kwargs['disable'] is disable
+
+
+def test_resolve_dependencies_disables_progress_via_helper() -> None:
+    """resolve_dependencies wires should_disable_progress into the progress bar."""
+    repos: dict = {}
+    with (
+        patch('collider.utils.packaging.resolver.should_disable_progress', return_value=True),
+        patch('collider.utils.packaging.resolver._ProgressReporter') as mock_reporter,
+        patch.object(resolvelib.Resolver, 'resolve', side_effect=RuntimeError('stop')),
+    ):
+        with pytest.raises(RuntimeError, match='stop'):
+            resolve_dependencies('grpc', None, repos)
+
+    assert mock_reporter.call_args.kwargs['disable'] is True
