@@ -13,8 +13,9 @@ Brief description of the change.
 
 - [ ] I have read the [contributing guidelines](https://github.com/MaxandreOgeret/collider/blob/main/CONTRIBUTING.md).
 - [ ] My commits are signed off (`git commit -s`) per the DCO.
-- [ ] Tests pass locally (e.g. `uv run pytest`).
-- [ ] Code follows project style (e.g. `uv run ruff check .`).
+- [ ] My commits follow [Conventional Commits](https://www.conventionalcommits.org/).
+- [ ] Tests pass (`uv run pytest`).
+- [ ] Format, lint, type, and static checks pass (`uv run ruff format --check .`, `uv run ruff check .`, `uv run ty check collider`, `uv run pylint --rcfile=pyproject.toml ./collider`).
 
 ## AI disclosure
 
