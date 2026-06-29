@@ -63,25 +63,12 @@ fix(serve): log warning on non-loopback push endpoint
 docs(contributing): add local dev setup guide
 ```
 
-## Sign Off Your Commits
-
-Collider uses the [Developer Certificate of Origin](https://developercertificate.org/).
-Every commit must carry a `Signed-off-by` line certifying you have the right to submit
-the change. Add it with:
-
-```bash
-git commit -s -m "feat(scope): ..."
-```
-
-CI rejects pull requests with unsigned commits. To sign off commits you have already
-made, run `git rebase --signoff <base-branch>` and force-push.
-
 ## Pull Requests
 
 Open pull requests against `main` and fill in the pull request template, including the
 checklist and the AI-use disclosure. CI runs pytest on Python 3.10 through 3.13; ruff,
-ty, and pylint on Python 3.13; Conventional Commit and sign-off (DCO) checks; and the
-template checklist. All checks must pass before merge.
+ty, and pylint on Python 3.13; the Conventional Commit check; and the template
+checklist. All checks must pass before merge.
 
 If you used AI tools for any part of a change, you must disclose it and confirm that a
 human (not the AI) reviewed every line and takes full responsibility. See the full

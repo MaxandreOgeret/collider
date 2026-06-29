@@ -20,21 +20,6 @@ and include enough detail to reproduce the problem or understand the request.
 - Fill in the pull request template, including the checklist and the AI
   disclosure.
 
-## Signing off your commits (DCO)
-
-Collider uses the [Developer Certificate of Origin](https://developercertificate.org/):
-every commit must carry a `Signed-off-by` line certifying that you wrote the change,
-or otherwise have the right to submit it under the project's license. Add it with:
-
-```bash
-git commit -s -m "feat(scope): ..."
-```
-
-This appends `Signed-off-by: Your Name <your@email>` from your git `user.name` and
-`user.email`. CI rejects pull requests whose commits are not signed off. To sign off
-commits you have already made, run `git rebase --signoff <base-branch>` and
-force-push the branch.
-
 ## Use of AI tools
 
 AI assistance is allowed, but accountability is not optional. This project has
