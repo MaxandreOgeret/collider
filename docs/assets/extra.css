@@ -42,3 +42,79 @@
     max-width: 13.6rem;
   }
 }
+
+/* Version switcher injected into the header by assets/version-select.js. Styled like the search
+   field (.md-search__form) so it reads as an interactive input that belongs in the header, in both
+   the light and slate schemes (the header keeps the primary color, with white text, in both). */
+.md-version-select {
+  display: flex;
+  align-items: center;
+  margin: 0 0.4rem;
+  height: 1.8rem;
+}
+
+.md-version-select__inner {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 1.8rem;
+  border: none;
+  border-radius: 0.1rem;
+  background-color: hsla(0, 0%, 0%, 0.07);
+  color: var(--md-primary-bg-color);
+  font: 700 0.7rem/1.8rem var(--md-text-font-family, inherit);
+  padding: 0 1.4rem 0 0.6rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 0.7rem;
+  transition: background-color 125ms;
+}
+
+.md-version-select__inner:hover {
+  background-color: hsla(0, 0%, 0%, 0.32);
+}
+
+.md-version-select__inner:focus-visible {
+  outline: 0.1rem solid var(--md-primary-bg-color);
+  outline-offset: 0.1rem;
+}
+
+/* Honored on Firefox and Chromium (Linux/Windows); macOS/iOS fall back to the native popup. */
+.md-version-select__inner option {
+  color: var(--md-default-fg-color);
+  background-color: var(--md-default-bg-color);
+}
+
+/* Hide the switcher on narrow screens where the header is already tight. */
+@media screen and (max-width: 59.9844em) {
+  .md-version-select {
+    display: none;
+  }
+}
+
+/* Banner shown on dev / older-release pages by assets/version-select.js. A defined tint plus a
+   solid brand bottom border make it read as a banner; the text and link use the default foreground
+   for AA contrast in both schemes (the link is bold + underlined to stay distinguishable). */
+.md-version-banner {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--md-default-fg-color);
+  background-color: var(--md-accent-fg-color--transparent);
+  border-bottom: 0.05rem solid var(--md-primary-fg-color);
+}
+
+.md-version-banner a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* The blog link injected into the docs left nav by assets/version-select.js. Weighted and spaced so
+   it reads as a top-level destination rather than a sub-page of the section rendered above it. */
+.md-nav__blog-link {
+  margin-top: 0.5rem;
+  font-weight: 700;
+}
