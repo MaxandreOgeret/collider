@@ -22,9 +22,7 @@ and include enough detail to reproduce the problem or understand the request.
 
 ## Use of AI tools
 
-AI assistance is allowed, but accountability is not optional. This project has
-received unsolicited, low-effort, machine-generated pull requests; to keep review
-time focused on genuine contributions:
+AI assistance is allowed, but accountability is not optional:
 
 - **Disclose** in the pull request whether AI tools were used for any part of the
   change.
