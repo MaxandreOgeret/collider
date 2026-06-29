@@ -634,6 +634,37 @@ def test_remove_with_prune_warns_on_corrupt_lockfile(
     assert 'could not be read' in caplog.text
 
 
+def test_remove_with_prune_summarizes_when_lockfile_is_missing(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """--prune ends with a clear skipped-prune summary when there is no lockfile."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('grpc', DependencySource.COLLIDER, None)],
+    )
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+    (subprojects / 'grpc.wrap').write_text('[wrap-file]\n', encoding='utf-8')
+    (subprojects / 'abseil-cpp.wrap').write_text('[wrap-file]\n', encoding='utf-8')
+
+    context = _make_context(tmp_path)
+    cmd = Remove(argparse.Namespace(package='grpc', prune=True), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert not (subprojects / 'grpc.wrap').exists()
+    assert (subprojects / 'abseil-cpp.wrap').exists()
+    assert 'No lockfile found' in caplog.text
+    assert 'prune skipped: no lockfile; run "collider lock" to create ownership metadata.' in (
+        caplog.text
+    )
+
+
 def test_remove_keeps_artifacts_when_dependency_index_is_unavailable(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -13,6 +13,22 @@ import pytest
 from _pytest.fixtures import SubRequest
 
 
+for name, value in {
+    'EX_OK': 0,
+    'EX_USAGE': 64,
+    'EX_DATAERR': 65,
+    'EX_NOINPUT': 66,
+    'EX_UNAVAILABLE': 69,
+    'EX_IOERR': 74,
+    'EX_CANTCREAT': 73,
+    'EX_CONFIG': 78,
+    'EX_NOPERM': 77,
+    'EX_SOFTWARE': 70,
+}.items():
+    if not hasattr(os, name):
+        setattr(os, name, value)
+
+
 MESON_PROJECTS = ['header', 'none', 'shared']
 
 

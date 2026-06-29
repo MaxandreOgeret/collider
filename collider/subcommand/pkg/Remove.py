@@ -88,6 +88,9 @@ class Remove(SubcommandInterface):
         if not validate_meson_project_cwd():
             return os.EX_NOINPUT
 
+        lockfile_path = Path.cwd() / Lockfile.get_filename()
+        prune_was_skipped = self.prune and not lockfile_path.exists()
+
         colliderfile = load_colliderfile()
         if find_collider_dependency(colliderfile, self.package_name) is None:
             logger.critical(
@@ -133,6 +136,10 @@ class Remove(SubcommandInterface):
             )
 
         warn_if_lockfile_needs_refresh(self.package_name)
+        if prune_was_skipped:
+            logger.info(
+                'prune skipped: no lockfile; run "collider lock" to create ownership metadata.'
+            )
         return os.EX_OK
 
     def _resolve_remaining_needed_packages(self, colliderfile: Colliderfile) -> Optional[set[str]]:
