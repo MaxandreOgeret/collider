@@ -18,7 +18,7 @@ from collider.repository.implementation.Filesystem import Filesystem
 from collider.repository.implementation.Wrap import Wrap
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
-from collider.utils.network import DEFAULT_NETWORK_TIMEOUT, safe_urlopen
+from collider.utils.network import DEFAULT_NETWORK_TIMEOUT, may_send_push_token, safe_urlopen
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 
@@ -73,6 +73,12 @@ class Unpublish(SubcommandInterface):
             default=_DEFAULT_PUSH_TOKEN_ENV,
             help='Environment variable to read push token from for collider repositories.',
         )
+        parser.add_argument(
+            '--insecure',
+            action='store_true',
+            default=False,
+            help='Allow deleting from a non-https repository, sending the token in cleartext.',
+        )
 
     def __init__(self, args: argparse.Namespace, context: Context):
         """
@@ -85,6 +91,7 @@ class Unpublish(SubcommandInterface):
         self.package_name: str = args.package
         self.version: str = args.version
         self.push_token_env: str = args.push_token_env
+        self.insecure: bool = getattr(args, 'insecure', False)
 
     @override
     def execute(self) -> int:
@@ -178,6 +185,9 @@ class Unpublish(SubcommandInterface):
                 f'Deleting from collider repository requires bearer token in "{self.push_token_env}". '
                 f'Export it first, e.g. `export {self.push_token_env}=<token>`.'
             )
+            return os.EX_USAGE
+
+        if not may_send_push_token(repo.url, insecure=self.insecure):
             return os.EX_USAGE
 
         repo_key = make_repo_key(self.package_name, self.version, PackageType.WRAP)

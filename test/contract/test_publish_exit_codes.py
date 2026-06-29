@@ -65,6 +65,7 @@ def _push_args(
     patch_archive: Path | None = None,
     push_token_env: str = 'COLLIDER_PUSH_TOKEN',
     dry_run: bool = False,
+    insecure: bool = False,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         repository=repository,
@@ -72,6 +73,7 @@ def _push_args(
         patch_archive=patch_archive,
         push_token_env=push_token_env,
         dry_run=dry_run,
+        insecure=insecure,
     )
 
 
@@ -158,7 +160,8 @@ def test_publish_ex_ioerr_unreachable_endpoint(tmp_path: Path) -> None:
     closed_port = _unused_localhost_port()
     collider_repo = Collider(urllib.parse.urlparse(f'http://127.0.0.1:{closed_port}/v2/'), {})
     cmd = Publish(
-        _push_args(repository='remote', builddir=builddir), _mock_context({'remote': collider_repo})
+        _push_args(repository='remote', builddir=builddir, insecure=True),
+        _mock_context({'remote': collider_repo}),
     )
 
     os.environ['COLLIDER_PUSH_TOKEN'] = 'secret'

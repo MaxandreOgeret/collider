@@ -30,7 +30,7 @@ from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.meson.info import load_project_metadata
 from collider.utils.meson.meson import DEFAULT_BUILD_DIR
-from collider.utils.network import DEFAULT_NETWORK_TIMEOUT, safe_urlopen
+from collider.utils.network import DEFAULT_NETWORK_TIMEOUT, may_send_push_token, safe_urlopen
 from collider.utils.packaging import compute_file_hash
 
 
@@ -80,6 +80,12 @@ class Publish(SubcommandInterface):
             help='Environment variable to read push token from for collider repositories.',
         )
         parser.add_argument(
+            '--insecure',
+            action='store_true',
+            default=False,
+            help='Allow pushing to a non-https repository, sending the token in cleartext.',
+        )
+        parser.add_argument(
             '--dry-run',
             action='store_true',
             default=False,
@@ -97,6 +103,7 @@ class Publish(SubcommandInterface):
         self.builddir: Path = args.builddir
         self.patch_archive: Path | None = args.patch_archive
         self.push_token_env: str = args.push_token_env
+        self.insecure: bool = getattr(args, 'insecure', False)
         self.dry_run: bool = args.dry_run
 
     @override
@@ -180,13 +187,9 @@ class Publish(SubcommandInterface):
                         repo.url.geturl(),
                     )
                 else:
-                    push_token = self._load_remote_push_token()
-                    if push_token is None:
-                        return os.EX_USAGE
-                    payload = self._build_remote_push_payload(
-                        package, source_archive, self.patch_archive
-                    )
-                    self._push_remote_wrap_repo(repo, push_token, payload)
+                    result = self._push_to_remote_collider(repo, package, source_archive)
+                    if result != os.EX_OK:
+                        return result
         except PackageAlreadyExistsError:
             logger.critical(
                 f'Version "{version}" of "{package_name}" already exists in repository '
@@ -203,6 +206,25 @@ class Publish(SubcommandInterface):
 
         if not self.dry_run:
             logger.info(f'Package "{package.name}" published successfully.')
+        return os.EX_OK
+
+    def _push_to_remote_collider(
+        self, repo: Collider, package: WrapPackage, source_archive: Path
+    ) -> int:
+        """
+        Send a built package to a remote collider repository, refusing an insecure transport.
+        :param repo: Target collider repository.
+        :param package: Built wrap package to publish.
+        :param source_archive: Source archive to upload.
+        :return: os.EX_OK on success, or an error code when the push is refused.
+        """
+        push_token = self._load_remote_push_token()
+        if push_token is None:
+            return os.EX_USAGE
+        if not may_send_push_token(repo.url, insecure=self.insecure):
+            return os.EX_USAGE
+        payload = self._build_remote_push_payload(package, source_archive, self.patch_archive)
+        self._push_remote_wrap_repo(repo, push_token, payload)
         return os.EX_OK
 
     @staticmethod

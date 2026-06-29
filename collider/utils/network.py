@@ -6,6 +6,8 @@
 import urllib.parse
 import urllib.request
 
+from collider.log import logger
+
 
 DEFAULT_NETWORK_TIMEOUT = 30.0
 
@@ -44,3 +46,28 @@ def build_safe_opener() -> urllib.request.OpenerDirector:
 def safe_urlopen(request, *, timeout: float = DEFAULT_NETWORK_TIMEOUT):
     """Open a request through the cross-origin credential-stripping opener."""
     return build_safe_opener().open(request, timeout=timeout)
+
+
+def may_send_push_token(url: urllib.parse.ParseResult, *, insecure: bool) -> bool:
+    """
+    Decide whether a bearer-token push may be sent to the given URL.
+    Sending the credential over a non-HTTPS transport exposes it in cleartext, so a non-HTTPS push
+    is refused unless the caller explicitly opts in with insecure.
+    :param url: Parsed push or delete endpoint URL.
+    :param insecure: Allow sending the token over a non-HTTPS connection.
+    :return: True when the push may proceed, False when it must be refused.
+    """
+    scheme = url.scheme.lower()
+    if scheme == 'https':
+        return True
+    if insecure:
+        logger.warning(
+            f'Sending the push token over an insecure "{scheme}" connection because --insecure '
+            'was passed.'
+        )
+        return True
+    logger.critical(
+        f'Refusing to send the push token over an insecure "{scheme}" connection. Use an https '
+        'repository URL, or pass --insecure to send the token in cleartext.'
+    )
+    return False
