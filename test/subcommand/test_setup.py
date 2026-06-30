@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from collider.Context import Context
-from collider.file_model.lockfile import LockedPackage, Lockfile
+from collider.file_model.lockfile import LockedPackage, Lockfile, compute_wrap_hash
 from collider.subcommand.Setup import Setup
 from collider.utils import meson
 from test.common.common import Subcommand, run_subcommand
@@ -250,10 +250,12 @@ def test_setup_with_lock_scopes_force_to_managed_packages(
         '[wrap-file]\ndirectory = bar\nsource_url = https://example.invalid/bar.tar.gz\n'
         f'source_filename = bar.tar.gz\nsource_hash = {"0" * 64}\n\n[provide]\nbar = bar_dep\n'
     )
+    # The lock must record foo's real hash, otherwise the drift gate aborts before force-scoping.
+    foo_hash = compute_wrap_hash((sourcedir / 'subprojects' / 'foo.wrap').read_text())
     Lockfile(
         dependencies={
             'foo': LockedPackage(
-                version='1.2.3', wrap_hash='sha256:' + '0' * 64, origin='https://wrapdb.example/v2/'
+                version='1.2.3', wrap_hash=foo_hash, origin='https://wrapdb.example/v2/'
             )
         },
     ).save(sourcedir / Lockfile.get_filename())
@@ -316,6 +318,61 @@ def test_setup_malformed_lock_errors(tmp_path: Path, capfd: pytest.CaptureFixtur
     stdout, stderr = capfd.readouterr()
     assert 'collider.lock is malformed' in stderr
     assert not builddir.exists()
+
+
+def test_setup_drifted_wrap_aborts_before_meson(tmp_path: Path, capfd: pytest.CaptureFixture):
+    """A wrap whose bytes differ from the lock aborts setup with EX_DATAERR, before Meson runs."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    # Lock foo with a hash that cannot match the on-disk foo.wrap, forcing drift.
+    Lockfile(
+        dependencies={
+            'foo': LockedPackage(
+                version='1.2.3', wrap_hash='sha256:' + '0' * 64, origin='https://wrapdb.example/v2/'
+            )
+        },
+    ).save(sourcedir / Lockfile.get_filename())
+
+    builddir = tmp_path / 'build'
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(sourcedir), '--builddir', str(builddir)],
+        )
+        == os.EX_DATAERR
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert '"foo.wrap" differs from the hash recorded in collider.lock' in stderr
+    assert '--allow-drift' in stderr
+    # The gate must fail fast: Meson is never configured.
+    assert not builddir.exists()
+
+
+def test_setup_drifted_wrap_allowed_with_flag(tmp_path: Path, capfd: pytest.CaptureFixture):
+    """--allow-drift downgrades drift to a warning and lets the build proceed."""
+    sourcedir = tmp_path / 'project'
+    _write_wrapped_foo_project(sourcedir)
+    Lockfile(
+        dependencies={
+            'foo': LockedPackage(
+                version='1.2.3', wrap_hash='sha256:' + '0' * 64, origin='https://wrapdb.example/v2/'
+            )
+        },
+    ).save(sourcedir / Lockfile.get_filename())
+
+    assert (
+        run_subcommand(
+            Subcommand.SETUP,
+            ['--sourcedir', str(sourcedir), '--builddir', str(tmp_path / 'build'), '--allow-drift'],
+            verbose=True,
+        )
+        == os.EX_OK
+    )
+
+    stdout, stderr = capfd.readouterr()
+    assert 'Continuing despite wrap drift' in stderr
+    assert '--force-fallback-for=foo' in stderr
 
 
 def test_setup_defers_to_user_supplied_force_fallback(tmp_path: Path, capfd: pytest.CaptureFixture):

@@ -24,6 +24,7 @@ from collider.utils.meson.infoTypes import ProjectInfo
 from collider.utils.packaging import validate_dependencies
 from collider.utils.project_state import (
     collect_force_fallback_names,
+    detect_locked_wrap_drift,
     managed_package_names,
     scan_wraps,
 )
@@ -70,6 +71,14 @@ Examples:
         )
 
         parser.add_argument(
+            '--allow-drift',
+            action='store_true',
+            default=False,
+            help='Build even if an installed wrap differs from collider.lock (warns instead of '
+            'failing).',
+        )
+
+        parser.add_argument(
             'meson_setup_args',
             nargs=argparse.REMAINDER,
             help='Arguments passed directly to "meson setup". Use "--" to separate from collider arguments.',
@@ -84,6 +93,7 @@ Examples:
         super().__init__(args, context)
         self.sourcedir: Path = args.sourcedir
         self.builddir: Path = args.builddir
+        self.allow_drift: bool = getattr(args, 'allow_drift', False)
         self.meson_setup_args = args.meson_setup_args
 
         if self.meson_setup_args:
@@ -121,6 +131,8 @@ Examples:
             return os.EX_NOINPUT
 
         try:
+            if not self._verify_no_lock_drift():
+                return os.EX_DATAERR
             fallback_args = self._force_fallback_args()
         except ValueError as exc:
             logger.critical(str(exc))
@@ -143,6 +155,33 @@ Examples:
             return os.EX_DATAERR
 
         return os.EX_OK
+
+    def _verify_no_lock_drift(self) -> bool:
+        """
+        Refuse to build when an installed wrap drifted from collider.lock.
+        A drifted wrap means the configured build no longer matches the locked resolution, so the
+        default is to fail fast; --allow-drift downgrades this to a loud warning for the legitimate
+        local-patch workflow.
+        :return: True when setup may proceed, False when it must abort.
+        :raises ValueError: When collider.lock exists but is malformed.
+        """
+        drifted = detect_locked_wrap_drift(self.sourcedir)
+        if not drifted:
+            return True
+
+        report = logger.warning if self.allow_drift else logger.critical
+        for name in drifted:
+            report(f'"{name}.wrap" differs from the hash recorded in collider.lock.')
+
+        if self.allow_drift:
+            logger.warning(
+                'Continuing despite wrap drift because --allow-drift was passed; '
+                'the build may not match collider.lock.'
+            )
+            return True
+
+        logger.critical('Run "collider lock" to re-lock, or pass --allow-drift to build anyway.')
+        return False
 
     @staticmethod
     def _user_forces_fallback(meson_args: list[str]) -> bool:

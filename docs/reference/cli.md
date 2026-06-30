@@ -43,13 +43,14 @@ emitted at init time to avoid discovering the gap only when publishing.
 Configure a Meson project.
 
 ```bash
-collider setup [--sourcedir PATH] [--builddir PATH] -- [meson args]
+collider setup [--sourcedir PATH] [--builddir PATH] [--allow-drift] -- [meson args]
 ```
 
 | Option            | Description                                      |
 |-------------------|--------------------------------------------------|
 | `--sourcedir PATH` | Meson source directory.                         |
 | `--builddir PATH`  | Meson build directory (default: `collider-build`). |
+| `--allow-drift`    | Build even if an installed wrap differs from `collider.lock` (warn instead of fail). |
 | `-- [args]`        | Arguments passed through to Meson.              |
 
 **Examples:**
@@ -65,7 +66,16 @@ collider setup -- --buildtype=debug
 than system copies. The forced set is scoped to `collider.lock` when present, or
 all wraps in `subprojects/` (with a warning) when it is absent; a malformed
 `collider.lock` aborts with `EX_DATAERR`. A user-supplied `--force-fallback-for`
-or `-Dforce_fallback_for` is honored as-is. See
+or `-Dforce_fallback_for` is honored as-is.
+
+When `collider.lock` is present, setup verifies that each locked wrap on disk
+still matches its recorded hash. If an installed `.wrap` was modified, setup
+aborts with `EX_DATAERR` before configuring Meson; run `collider lock` to
+re-lock or pass `--allow-drift` to build anyway (downgrades to a warning). The
+hash covers the `.wrap` descriptor only, not the extracted subproject source. A
+wrap committed into a consumer repo under Git line-ending normalization
+(`core.autocrlf` or a `.gitattributes` `text` rule) can be re-hashed differently
+than it was locked and trip the gate; use `--allow-drift` if that applies. See
 [Wrap Fallback Enforcement](../guide/project-setup.md#wrap-fallback-enforcement).
 
 ---
