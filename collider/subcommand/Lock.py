@@ -123,8 +123,7 @@ class Lock(InstallSubcommand):
                     exclude_optional=any(dep.exclude_optional for dep in collider_deps),
                 )
             except MalformedRepositoryMetadata as e:
-                logger.critical(f'Refusing to lock against malformed repository metadata: {e}')
-                return os.EX_DATAERR
+                return self._reject_malformed_metadata(e, 'lock')
             except (
                 resolvelib.RequirementsConflicted,
                 resolvelib.ResolutionImpossible,

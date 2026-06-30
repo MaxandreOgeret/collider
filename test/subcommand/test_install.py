@@ -20,12 +20,13 @@ from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import Lockfile, compute_wrap_hash
 from collider.Package import WrapPackage
-from collider.repository.entries import RepoPackageEntry
+from collider.repository.entries import RejectReason, RepoPackageEntry, add_wrap_entry
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
 from collider.subcommand.pkg.Add import Add
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
+from collider.utils.packaging.resolver import MalformedRepositoryMetadata
 
 
 ORIGIN = 'https://wrapdb.example.com/v2/'
@@ -552,3 +553,55 @@ def test_install_adds_dependency_without_version(tmp_path: Path, monkeypatch) ->
     assert len(colliderfile.dependencies) == 1
     assert colliderfile.dependencies[0].name == 'shared'
     assert colliderfile.dependencies[0].version is None
+
+
+def test_install_fails_closed_on_malformed_metadata(tmp_path: Path) -> None:
+    """A lockless install whose strict resolution raises MalformedRepositoryMetadata returns
+    EX_DATAERR rather than resolving against corrupt repository metadata."""
+    from collider.subcommand.Install import Install
+
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+
+    repo = MagicMock(spec=RepositoryInterface)
+    packages: dict = {}
+    # A package with provides flips on the transitive resolver path (use_transitive).
+    add_wrap_entry(packages, 'shared', '1.0.0', ['libshared'])
+    repo.packages = packages
+    repo.requires_network.return_value = False
+    context = _make_context(tmp_path, repo)
+
+    cmd = Install(argparse.Namespace(offline=False), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.Install.resolve_all_dependencies',
+            side_effect=MalformedRepositoryMetadata('shared', RejectReason.UNSAFE_VERSION),
+        ):
+            assert cmd.execute() == os.EX_DATAERR
+    finally:
+        os.chdir(cwd)
+
+
+def test_add_fails_closed_on_malformed_metadata(tmp_path: Path) -> None:
+    """Strict transitive resolution raising MalformedRepositoryMetadata makes pkg add return
+    EX_DATAERR rather than resolving against corrupt repository metadata."""
+    repo = MagicMock(spec=RepositoryInterface)
+    packages: dict = {}
+    # A package with provides keeps the dependency-name index non-empty so resolution runs.
+    add_wrap_entry(packages, 'libshared', '1.0.0', ['libshared'])
+    repo.packages = packages
+    repo.requires_network.return_value = False
+    context = _make_context(tmp_path, repo)
+
+    cmd = Add(argparse.Namespace(package='shared', offline=False), context)
+
+    with patch(
+        'collider.subcommand.pkg.Add.resolve_dependencies',
+        side_effect=MalformedRepositoryMetadata('shared', RejectReason.UNSAFE_VERSION),
+    ):
+        assert cmd._resolve_and_install_transitive({'repo1': repo}) == os.EX_DATAERR
