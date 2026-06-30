@@ -15,7 +15,6 @@ import resolvelib
 from collider.repository.entries import (
     RejectedEntry,
     RejectReason,
-    RepoPackageEntry,
     add_wrap_entry,
 )
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface

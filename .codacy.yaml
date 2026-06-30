@@ -1,0 +1,9 @@
+---
+# Bandit reports pytest's `assert` statements as B101 ("assert detected"), which it
+# ranks as a high-severity security finding. Asserts are the expected idiom in tests,
+# so exclude the test tree from Bandit while keeping every other Codacy engine active
+# on it.
+engines:
+  bandit:
+    exclude_paths:
+      - 'test/**'
