@@ -55,6 +55,11 @@ Patch archives may use any extension; `collider patch` produces `.tar.xz` by def
 ### Wrap Repository (Remote)
 
 - WrapDB-compatible endpoint backed by `releases.json` and wraps.
+- `releases.json` is untrusted input: each entry is validated independently, and
+  an entry with a non-object shape or an unsafe name or version segment is
+  skipped while the rest of the repository still loads. Names and versions become
+  filesystem paths and URL segments, so unsafe segments are rejected at this
+  boundary.
 - Read-only: no publish or unpublish support.
 - HTTPS preferred; HTTP is allowed with a warning.
 
@@ -114,7 +119,7 @@ Runs Meson setup and validates `collider.json` against Meson introspection.
 
 ### `lock`
 
-Resolves dependencies from `collider.json` (including transitive dependencies) and writes `collider.lock`. Does not modify `subprojects/`; only refreshes pinned resolution state.
+Resolves dependencies from `collider.json` (including transitive dependencies) and writes `collider.lock`. Does not modify `subprojects/`; only refreshes pinned resolution state. If a package the resolver directly needs has no usable version anywhere and its repository metadata was rejected as malformed, `lock` fails closed with `EX_DATAERR` rather than resolving against corrupt data; `install` and `pkg add` apply the same check.
 
 ### `publish`
 
@@ -252,6 +257,12 @@ Searches configured repositories by name and optional version constraint.
 - `scans/` caches dependency scan results by name+version.
 - `wrapdb/` caches fetched `releases.json` per remote repository.
 - Offline mode forbids network access but allows local `file://` archives.
+- The `wraps/` and `scans/` caches are keyed by name+version only, so during
+  resolution Collider scopes reads to the repository the resolver selected: when
+  online it fetches each candidate's wrap and dependency scan from that
+  repository rather than the cache, and the name+version-keyed scan cache is
+  consulted only offline. This keeps two repositories that publish the same name
+  and version from cross-contaminating the resolved graph and the lockfile.
 
 **Rationale**
 

@@ -34,6 +34,7 @@ from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 from collider.utils.packaging.resolver import (
+    MalformedRepositoryMetadata,
     ResolutionSummary,
     RootSpec,
     build_dep_name_index,
@@ -482,12 +483,16 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
                 root_version_spec=version_spec_str,
                 repos=repos,
                 offline=self.offline,
+                strict=True,
                 wrap_cache=self.context.cache,
                 include_conditional=self.include_conditional,
                 exclude_optional=self.exclude_optional,
                 include_names=include_set,
                 exclude_names=exclude_set,
             )
+        except MalformedRepositoryMetadata as e:
+            logger.critical(f'Refusing to install against malformed repository metadata: {e}')
+            return os.EX_DATAERR
         except (
             resolvelib.RequirementsConflicted,
             resolvelib.ResolutionImpossible,

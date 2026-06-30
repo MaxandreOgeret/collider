@@ -13,7 +13,7 @@ from typing import Optional, final
 from packaging.specifiers import SpecifierSet
 
 from collider.Package import WrapPackage
-from collider.repository.entries import RepoPackageEntry
+from collider.repository.entries import RejectedEntry, RepoPackageEntry
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key, parse_repo_key
 from collider.utils.packaging.types import RepoKey
@@ -26,8 +26,13 @@ class PackageAlreadyExistsError(ValueError):
 class RepositoryInterface(ABC):
     """Shared repository API so callers are backend-agnostic."""
 
-    def __init__(self, packages: dict[RepoKey, RepoPackageEntry]) -> None:
+    def __init__(
+        self,
+        packages: dict[RepoKey, RepoPackageEntry],
+        rejected_metadata: Optional[list[RejectedEntry]] = None,
+    ) -> None:
         self.packages = packages
+        self.rejected_metadata: list[RejectedEntry] = rejected_metadata or []
         self._origin_url: str = ''
 
     @property

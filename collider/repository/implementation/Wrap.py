@@ -14,7 +14,7 @@ from typing import Optional
 
 from collider.log import logger
 from collider.Package import WrapPackage
-from collider.repository.entries import RepoPackageEntry, packages_from_releases
+from collider.repository.entries import RejectedEntry, RepoPackageEntry, packages_from_releases
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
 from collider.utils.core import assert_safe_path_segment
 from collider.utils.fs import atomic_write_text
@@ -37,8 +37,8 @@ def _get_pkg_wrap_url(url: urllib.parse.ParseResult, package: RepoPackageEntry) 
 
 def _wrap_releases_to_packages(
     wrap_releases: dict[str, WrapDbReleasesEntry],
-) -> dict[RepoKey, RepoPackageEntry]:
-    """Convert WrapDB releases to an in-memory package index."""
+) -> tuple[dict[RepoKey, RepoPackageEntry], list[RejectedEntry]]:
+    """Convert WrapDB releases to an in-memory package index and its rejected entries."""
     return packages_from_releases(wrap_releases)
 
 
@@ -72,14 +72,18 @@ class Wrap(RepositoryInterface):
     """Read-only WrapDB-compatible repository client."""
 
     def __init__(
-        self, url: urllib.parse.ParseResult, packages: dict[RepoKey, RepoPackageEntry]
+        self,
+        url: urllib.parse.ParseResult,
+        packages: dict[RepoKey, RepoPackageEntry],
+        rejected_metadata: Optional[list[RejectedEntry]] = None,
     ) -> None:
         """
         Build a Wrap repository from a base URL and preloaded package index.
         :param url: Base URL for the WrapDB-compatible API (e.g. wrapdb.mesonbuild.com/v2/).
         :param packages: Preloaded package index (e.g. from releases.json).
+        :param rejected_metadata: Entries dropped while parsing releases.json.
         """
-        super().__init__(packages)
+        super().__init__(packages, rejected_metadata=rejected_metadata)
         self.url = url
 
     # Repo operations.
@@ -129,8 +133,14 @@ class Wrap(RepositoryInterface):
                 logger.warning('Failed to refresh wrap releases; using cached data.')
                 releases = json.loads(cache_file.read_text(encoding='utf-8'))
 
-        packages = _wrap_releases_to_packages(releases)
-        return cls(effective_url, packages)
+        packages, rejected = _wrap_releases_to_packages(releases)
+        if rejected:
+            logger.warning(
+                f'{len(rejected)} releases.json entr'
+                f'{"y" if len(rejected) == 1 else "ies"} from "{effective_url.geturl()}" '
+                'skipped due to malformed metadata.'
+            )
+        return cls(effective_url, packages, rejected_metadata=rejected)
 
     def _update_impl(self) -> None:
         pass
