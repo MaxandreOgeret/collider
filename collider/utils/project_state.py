@@ -14,9 +14,14 @@ from typing import Optional
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import Lockfile, compute_wrap_hash
 from collider.log import logger
-from collider.Package import get_provide_names
+from collider.Package import get_provide_names, read_wrap_directory
+from collider.utils.core import is_safe_path_segment
 from collider.utils.meson import SUBPROJECTS_DIR
 from collider.utils.packaging.Dependency import Dependency, DependencySource
+
+
+# Meson's shared download cache lives under subprojects/; it is never a package's extracted tree.
+_RESERVED_SUBPROJECT_DIRS = frozenset({'packagecache'})
 
 
 def load_colliderfile() -> Colliderfile:
@@ -60,21 +65,88 @@ def update_collider_dependency_version(
     return True
 
 
+def _declared_subproject_dir(wrap_path: Path, package_name: str) -> Optional[str]:
+    """
+    Return the extracted subproject directory a wrap declares via ``directory=``, or None.
+    Meson extracts a wrap into its ``directory`` field (for collider/WrapDB wraps usually
+    ``<name>-<version>``), not necessarily ``<package_name>``. Returns None when the wrap is
+    absent, unreadable, declares no directory, or declares one that is unsafe or reserved, so
+    the caller never deletes an unexpected path.
+    :param wrap_path: Path to the package's .wrap file.
+    :param package_name: Package whose artifacts are being removed (for messages).
+    :return: A safe directory name to remove, or None.
+    """
+    try:
+        declared = read_wrap_directory(wrap_path.read_text(encoding='utf-8'))
+    except (OSError, UnicodeDecodeError, configparser.Error) as exc:
+        logger.debug(f'Cannot read wrap "{wrap_path}" to resolve its directory: {exc}')
+        return None
+    if declared is None:
+        return None
+    if not is_safe_path_segment(declared):
+        logger.warning(
+            f'Wrap for "{package_name}" declares an unsafe subproject directory '
+            f'"{declared}"; leaving it in place. Remove it manually if needed.'
+        )
+        return None
+    return declared
+
+
+def _remove_subproject_tree(subprojects_dir: Path, name: str) -> bool:
+    """
+    Remove a single extracted subproject directory and report whether anything was removed.
+    ``name`` is a safe single path segment, so the target is always a direct child of
+    subprojects/; the shared packagecache is never touched, and a symlink or file is unlinked
+    rather than followed into.
+    :param subprojects_dir: The project's subprojects/ directory.
+    :param name: Safe single-segment directory name to remove.
+    :return: True when something was removed.
+    """
+    if name in _RESERVED_SUBPROJECT_DIRS:
+        logger.debug(f'Preserving reserved subproject directory "{name}".')
+        return False
+    target = subprojects_dir / name
+    if target.is_symlink() or target.is_file():
+        target.unlink()
+        return True
+    if target.is_dir():
+        shutil.rmtree(target)
+        return True
+    return False
+
+
 def remove_installed_artifacts(package_name: str) -> bool:
-    """Remove installed wrap state from subprojects/ for a package."""
+    """
+    Remove a package's installed wrap state: the .wrap descriptor and any extracted source tree.
+    Meson extracts into the wrap's ``directory=`` field, so both that target and the legacy
+    ``<package_name>`` directory are cleared (they collapse to one path when equal); clearing the
+    legacy directory also keeps a later reinstall from tripping on a stale tree. Names are
+    validated as safe single path segments first, so an irreversible delete can never escape
+    subprojects/.
+    :param package_name: Collider-managed package to remove.
+    :return: True when any artifact was removed.
+    """
+    if not is_safe_path_segment(package_name):
+        logger.warning(f'Refusing to remove artifacts for unsafe package name "{package_name}".')
+        return False
+
+    subprojects_dir = Path.cwd() / SUBPROJECTS_DIR
+    wrap_path = subprojects_dir / f'{package_name}.wrap'
+
+    # Resolve the extracted directory from the wrap before unlinking it.
+    declared_dir = _declared_subproject_dir(wrap_path, package_name)
+
     removed_any = False
-    wrap_path = Path.cwd() / SUBPROJECTS_DIR / f'{package_name}.wrap'
     if wrap_path.exists() or wrap_path.is_symlink():
         wrap_path.unlink()
         removed_any = True
 
-    subproject_dir = Path.cwd() / SUBPROJECTS_DIR / package_name
-    if subproject_dir.is_symlink() or subproject_dir.is_file():
-        subproject_dir.unlink()
-        removed_any = True
-    elif subproject_dir.is_dir():
-        shutil.rmtree(subproject_dir)
-        removed_any = True
+    dir_names = [package_name]
+    if declared_dir is not None and declared_dir != package_name:
+        dir_names.append(declared_dir)
+    for name in dir_names:
+        if _remove_subproject_tree(subprojects_dir, name):
+            removed_any = True
 
     return removed_any
 
