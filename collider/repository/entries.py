@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional
 
-from collider.log import logger
 from collider.utils.core import is_safe_path_segment
 from collider.utils.meson.infoTypes import WrapDbReleases
 from collider.utils.packaging.PackageType import PackageType

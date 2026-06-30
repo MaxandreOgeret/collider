@@ -17,12 +17,14 @@ from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import LockedPackage, Lockfile
 from collider.log import logger
 from collider.repository.entries import RepoPackageEntry
+from collider.repository.implementation.RepositoryInterface import RepositoryInterface
 from collider.subcommand.Install import Install as InstallSubcommand
 from collider.utils.compat import override
 from collider.utils.packaging.Dependency import DependencySource
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 from collider.utils.packaging.resolver import (
+    Candidate,
     MalformedRepositoryMetadata,
     RootSpec,
     build_dep_name_index,
@@ -132,33 +134,9 @@ class Lock(InstallSubcommand):
                 return os.EX_UNAVAILABLE
 
             direct_names = {dep.name for dep in collider_deps}
-            for pkg_name, candidate in resolution.mapping.items():
-                repo = repos.get(candidate.repo_name)
-                if repo is None:
-                    logger.warning(
-                        f'Repository "{candidate.repo_name}" unavailable for "{pkg_name}".'
-                    )
-                    continue
-
-                repo_key = make_repo_key(pkg_name, candidate.version, PackageType.WRAP)
-                entry = RepoPackageEntry(pkg_name, candidate.version, PackageType.WRAP)
-                package = self._fetch_package(entry, repo, repo_key)
-                if package is None:
-                    return os.EX_IOERR
-
-                try:
-                    self.context.cache.verify_archives(package, offline=self.offline)
-                except (ValueError, FileNotFoundError) as e:
-                    logger.critical(f'Archive verification failed for "{pkg_name}": {e}')
-                    return os.EX_DATAERR
-
-                locked = LockedPackage.from_wrap_text(
-                    candidate.version, package.wrap_text, normalize_url(repo.origin_url)
-                )
-                if pkg_name in direct_names:
-                    lockfile.dependencies[pkg_name] = locked
-                else:
-                    lockfile.packages[pkg_name] = locked
+            error = self._lock_resolved_packages(resolution.mapping, direct_names, repos, lockfile)
+            if error is not None:
+                return error
         else:
             for dep in collider_deps:
                 version_spec, _ = self._parse_version_spec(dep.name, dep.version)
@@ -188,6 +166,48 @@ class Lock(InstallSubcommand):
         lockfile.save()
         logger.info('Lockfile written.')
         return os.EX_OK
+
+    def _lock_resolved_packages(
+        self,
+        mapping: dict[str, Candidate],
+        direct_names: set[str],
+        repos: dict[str, RepositoryInterface],
+        lockfile: Lockfile,
+    ) -> Optional[int]:
+        """
+        Fetch and pin each resolved candidate into the lockfile.
+        :param mapping: Resolved package name to selected candidate.
+        :param direct_names: Names of directly-declared dependencies.
+        :param repos: Configured repositories.
+        :param lockfile: Lockfile to populate in place.
+        :return: An error exit code on failure, else None.
+        """
+        for pkg_name, candidate in mapping.items():
+            repo = repos.get(candidate.repo_name)
+            if repo is None:
+                logger.warning(f'Repository "{candidate.repo_name}" unavailable for "{pkg_name}".')
+                continue
+
+            repo_key = make_repo_key(pkg_name, candidate.version, PackageType.WRAP)
+            entry = RepoPackageEntry(pkg_name, candidate.version, PackageType.WRAP)
+            package = self._fetch_package(entry, repo, repo_key)
+            if package is None:
+                return os.EX_IOERR
+
+            try:
+                self.context.cache.verify_archives(package, offline=self.offline)
+            except (ValueError, FileNotFoundError) as e:
+                logger.critical(f'Archive verification failed for "{pkg_name}": {e}')
+                return os.EX_DATAERR
+
+            locked = LockedPackage.from_wrap_text(
+                candidate.version, package.wrap_text, normalize_url(repo.origin_url)
+            )
+            if pkg_name in direct_names:
+                lockfile.dependencies[pkg_name] = locked
+            else:
+                lockfile.packages[pkg_name] = locked
+        return None
 
     @staticmethod
     def _validate_cwd() -> bool:
