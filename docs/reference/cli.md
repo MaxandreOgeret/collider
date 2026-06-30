@@ -257,7 +257,10 @@ Fails if the package is already installed unless `--force` is given. If the wrap
 
 Remove a dependency from `collider.json`. Collider removes the installed wrap
 only when it can prove the package is no longer needed; otherwise it leaves
-the wrap in place.
+the wrap in place. When it does remove a package, it deletes both the `.wrap`
+descriptor and the extracted source tree under `subprojects/` (the directory the
+wrap declares via `directory=`, plus the legacy `<name>` directory), so a stale
+tree cannot later satisfy a Meson `dependency()`.
 
 ```bash
 collider pkg remove <name>

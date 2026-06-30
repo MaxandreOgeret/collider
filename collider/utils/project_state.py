@@ -70,8 +70,8 @@ def _declared_subproject_dir(wrap_path: Path, package_name: str) -> Optional[str
     Return the extracted subproject directory a wrap declares via ``directory=``, or None.
     Meson extracts a wrap into its ``directory`` field (for collider/WrapDB wraps usually
     ``<name>-<version>``), not necessarily ``<package_name>``. Returns None when the wrap is
-    absent, unreadable, declares no directory, or declares one that is unsafe or reserved, so
-    the caller never deletes an unexpected path.
+    absent, unreadable, declares no directory, or declares one that is not a safe path segment,
+    so the caller never deletes an unexpected path.
     :param wrap_path: Path to the package's .wrap file.
     :param package_name: Package whose artifacts are being removed (for messages).
     :return: A safe directory name to remove, or None.
@@ -102,7 +102,10 @@ def _remove_subproject_tree(subprojects_dir: Path, name: str) -> bool:
     :param name: Safe single-segment directory name to remove.
     :return: True when something was removed.
     """
-    if name in _RESERVED_SUBPROJECT_DIRS:
+    # Compare case-insensitively and ignore trailing dots/spaces so a wrap cannot dodge the
+    # guard with `directory=PackageCache` on a case-insensitive filesystem (macOS/Windows) or a
+    # Windows trailing-dot variant, where that path is still the shared packagecache.
+    if name.strip(' .').casefold() in _RESERVED_SUBPROJECT_DIRS:
         logger.debug(f'Preserving reserved subproject directory "{name}".')
         return False
     target = subprojects_dir / name

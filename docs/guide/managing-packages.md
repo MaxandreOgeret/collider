@@ -109,7 +109,10 @@ works.
 `pkg remove` is conservative about installed artifacts. If another dependency
 still requires the package transitively, Collider keeps the wrap in place. If
 Collider cannot determine safely whether the package is still needed, it also
-leaves the wrap in place and warns instead of deleting it.
+leaves the wrap in place and warns instead of deleting it. When it does remove a
+package, it deletes both the `.wrap` descriptor and the extracted source tree
+under `subprojects/`, so an obsolete source tree cannot keep satisfying a Meson
+`dependency()` after removal.
 
 If the package is still present in `collider.lock`, Collider warns you to run
 `collider lock` to update the lockfile.

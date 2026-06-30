@@ -311,6 +311,32 @@ def test_remove_artifacts_never_deletes_packagecache(tmp_path: Path, monkeypatch
     assert (pkgcache / 'shared.tar.gz').exists()
 
 
+def test_remove_artifacts_packagecache_guard_is_case_insensitive(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """`directory = PackageCache` must not wipe the cache on a case-insensitive filesystem."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'evil', _wrap_file_text('PackageCache'))
+    pkgcache = subprojects / 'packagecache'
+    pkgcache.mkdir()
+    (pkgcache / 'shared.tar.gz').write_text('archive', encoding='utf-8')
+
+    assert remove_installed_artifacts('evil') is True
+    assert (pkgcache / 'shared.tar.gz').exists()
+
+
+def test_remove_artifacts_directory_equals_name(tmp_path: Path, monkeypatch) -> None:
+    """When `directory=` equals the package name the tree is removed once, not twice."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'foo', _wrap_file_text('foo'))
+    (subprojects / 'foo').mkdir()
+
+    assert remove_installed_artifacts('foo') is True
+    assert not (subprojects / 'foo').exists()
+
+
 def test_remove_artifacts_refuses_unsafe_directory(tmp_path: Path, monkeypatch) -> None:
     """An unsafe `directory=` (path traversal) deletes nothing outside subprojects/."""
     monkeypatch.chdir(tmp_path)

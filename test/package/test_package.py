@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from collider.Package import WrapPackage, get_provide_names
+from collider.Package import WrapPackage, get_provide_names, read_wrap_directory
 
 
 def test_wrap_package_install_writes_wrap_file(tmp_path: Path):
@@ -129,3 +129,25 @@ def test_get_provide_names_reads_git_wrap_provide():
 
 def test_get_provide_names_without_provide_section_returns_empty():
     assert get_provide_names('[wrap-git]\nurl=https://example.invalid/foo.git\n') == []
+
+
+def test_read_wrap_directory_from_wrap_file():
+    text = '[wrap-file]\ndirectory = fmt-10.0.0\nsource_url = https://x/y.tar.gz\n'
+    assert read_wrap_directory(text) == 'fmt-10.0.0'
+
+
+def test_read_wrap_directory_from_wrap_git():
+    text = '[wrap-git]\ndirectory = mydep-src\nurl = https://example.invalid/mydep.git\n'
+    assert read_wrap_directory(text) == 'mydep-src'
+
+
+def test_read_wrap_directory_blank_is_none():
+    assert read_wrap_directory('[wrap-file]\ndirectory =   \nsource_url = https://x/y\n') is None
+
+
+def test_read_wrap_directory_absent_is_none():
+    assert read_wrap_directory('[wrap-file]\nsource_url = https://x/y.tar.gz\n') is None
+
+
+def test_read_wrap_directory_redirect_is_none():
+    assert read_wrap_directory('[wrap-redirect]\nfilename = subprojects/other.wrap\n') is None
