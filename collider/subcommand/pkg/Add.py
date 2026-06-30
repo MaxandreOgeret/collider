@@ -491,8 +491,7 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
                 exclude_names=exclude_set,
             )
         except MalformedRepositoryMetadata as e:
-            logger.critical(f'Refusing to install against malformed repository metadata: {e}')
-            return os.EX_DATAERR
+            return self._reject_malformed_metadata(e, 'install')
         except (
             resolvelib.RequirementsConflicted,
             resolvelib.ResolutionImpossible,

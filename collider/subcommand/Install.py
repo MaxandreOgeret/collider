@@ -254,8 +254,7 @@ class Install(SubcommandInterface):
                     exclude_optional=any(dep.exclude_optional for dep in collider_deps),
                 )
             except MalformedRepositoryMetadata as e:
-                logger.critical(f'Refusing to install against malformed repository metadata: {e}')
-                return os.EX_DATAERR
+                return self._reject_malformed_metadata(e, 'install')
             except (
                 resolvelib.RequirementsConflicted,
                 resolvelib.ResolutionImpossible,

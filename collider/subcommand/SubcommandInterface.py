@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 from abc import ABC, abstractmethod
 from typing import Optional
 
 from collider.Context import Context
+from collider.log import logger
 
 
 class SubcommandInterface(ABC):
@@ -48,3 +50,14 @@ class SubcommandInterface(ABC):
     @abstractmethod
     def execute(self) -> int:
         """Process exit code for the CLI to propagate."""
+
+    @staticmethod
+    def _reject_malformed_metadata(exc: Exception, action: str) -> int:
+        """
+        Log a refusal to act on malformed repository metadata and return the data-error code.
+        :param exc: The raised malformed-metadata error.
+        :param action: Verb describing the refused action, e.g. "lock" or "install".
+        :return: The data-error exit code.
+        """
+        logger.critical(f'Refusing to {action} against malformed repository metadata: {exc}')
+        return os.EX_DATAERR
