@@ -499,7 +499,7 @@ def test_provider_get_dependencies_maps_deps_to_requirements() -> None:
         repos,
         dep_index,
         scan_cache={
-            'grpc_1.0.0': scanned,
+            'grpc_1.0.0_local': scanned,
         },
     )
 
@@ -522,7 +522,7 @@ def test_provider_get_dependencies_skips_self_reference() -> None:
         repos,
         dep_index,
         scan_cache={
-            'zlib_1.3.1': scanned,
+            'zlib_1.3.1_local': scanned,
         },
     )
 
@@ -550,7 +550,7 @@ def test_provider_get_dependencies_deduplicates() -> None:
         repos,
         dep_index,
         scan_cache={
-            'grpc_1.0.0': scanned,
+            'grpc_1.0.0_local': scanned,
         },
     )
 
@@ -575,7 +575,7 @@ def test_provider_get_dependencies_passes_version_constraints() -> None:
         repos,
         dep_index,
         scan_cache={
-            'grpc_1.0.0': scanned,
+            'grpc_1.0.0_local': scanned,
         },
     )
 
@@ -599,8 +599,8 @@ def test_provider_get_dependencies_unmapped_reported_once() -> None:
         repos,
         dep_index,
         scan_cache={
-            'grpc_1.0.0': scanned,
-            'grpc_2.0.0': scanned,
+            'grpc_1.0.0_local': scanned,
+            'grpc_2.0.0_local': scanned,
         },
     )
 
@@ -627,7 +627,7 @@ def test_provider_get_dependencies_uses_scan_cache() -> None:
         repos,
         dep_index,
         scan_cache={
-            'grpc_1.0.0': scanned,
+            'grpc_1.0.0_local': scanned,
         },
     )
 
@@ -656,7 +656,7 @@ def test_provider_get_dependencies_merges_version_constraints() -> None:
         repos,
         dep_index,
         scan_cache={
-            'grpc_1.0.0': scanned,
+            'grpc_1.0.0_local': scanned,
         },
     )
 
@@ -823,7 +823,7 @@ def test_strict_get_dependencies_does_not_fail_on_unmapped_dep() -> None:
         repos,
         build_dep_name_index(repos),
         strict=True,
-        scan_cache={'foo_1.0.0': scanned},
+        scan_cache={'foo_1.0.0_local': scanned},
     )
 
     assert provider.get_dependencies(Candidate('foo', '1.0.0', 'local')) == []
@@ -1184,41 +1184,53 @@ def test_scan_candidate_online_uses_repo_get_package() -> None:
     repo.get_package.assert_called_once()
 
 
-def test_scan_candidate_online_tries_wrap_cache_before_http() -> None:
-    """In online mode, _scan_candidate checks wrap_cache before calling repo.get_package()."""
-    import hashlib
-
+def test_scan_candidate_online_fetches_from_repo_not_cache() -> None:
+    """Online, _scan_candidate fetches from the resolver-selected repo, never the
+    name+version-keyed wrap cache, so a same-versioned wrap from another repo cannot
+    contaminate the scan (and thus the locked dependency graph)."""
     from collider.cache import WrapCache
-    from collider.Package import WrapPackage
-
-    content = b'source-payload'
-    content_hash = hashlib.sha256(content).hexdigest()
 
     packages = _make_packages(('zlib', '1.3.1', ['zlib']))
     repo = _make_repo(packages, requires_network=True)
+    repo.get_package.return_value = None
     repos = {'remote': repo}
     dep_index = build_dep_name_index(repos)
 
-    cached_pkg = WrapPackage.from_wrap_text(
-        'zlib',
-        '1.3.1',
-        f'[wrap-file]\n'
-        f'source_url=https://example.com/zlib-1.3.1.tar.xz\n'
-        f'source_filename=zlib-1.3.1.tar.xz\n'
-        f'source_hash={content_hash}\n',
-    )
-
     mock_cache = MagicMock(spec=WrapCache)
-    mock_cache.load_wrap.return_value = cached_pkg
-    mock_cache.load_scan.return_value = None
 
     provider = ColliderProvider(repos, dep_index, offline=False, wrap_cache=mock_cache)
     candidate = Candidate('zlib', '1.3.1', 'remote')
 
     provider._scan_candidate(candidate)
 
-    mock_cache.load_wrap.assert_called_once_with('zlib', '1.3.1')
-    repo.get_package.assert_not_called()
+    repo.get_package.assert_called_once()
+    mock_cache.load_wrap.assert_not_called()
+
+
+def test_get_dependencies_scan_cache_is_keyed_by_repo() -> None:
+    """Two repos serving the same name+version are distinct packages, so their scans must not
+    be shared: reusing one repo's scan for the other would bake the wrong dependency graph
+    into collider.lock."""
+    packages = _make_packages(
+        ('foo', '1.0.0', ['foo']),
+        ('a', '1.0.0', ['a']),
+        ('b', '1.0.0', ['b']),
+    )
+    repos = {'repo_a': _make_repo(packages), 'repo_b': _make_repo(packages)}
+    dep_index = build_dep_name_index(repos)
+
+    provider = ColliderProvider(repos, dep_index)
+
+    def fake_scan(candidate: Candidate) -> list[ScannedDependency]:
+        dep = 'a' if candidate.repo_name == 'repo_a' else 'b'
+        return [ScannedDependency(name=dep, required=True)]
+
+    with patch.object(provider, '_scan_candidate', side_effect=fake_scan):
+        deps_a = provider.get_dependencies(Candidate('foo', '1.0.0', 'repo_a'))
+        deps_b = provider.get_dependencies(Candidate('foo', '1.0.0', 'repo_b'))
+
+    assert [d.name for d in deps_a] == ['a']
+    assert [d.name for d in deps_b] == ['b']
 
 
 def test_scan_candidate_offline_local_repo_uses_get_package() -> None:
@@ -1413,10 +1425,10 @@ def test_resolve_all_per_root_exclude_does_not_leak() -> None:
     )
 
     scan_results = {
-        'libfoo_1.0.0': [
+        'libfoo_1.0.0_local': [
             ScannedDependency(name='libcommon', required=True),
         ],
-        'libbar_1.0.0': [
+        'libbar_1.0.0_local': [
             ScannedDependency(name='libcommon', required=True),
         ],
     }
@@ -1451,10 +1463,10 @@ def test_resolve_all_per_root_include_scopes_to_root() -> None:
     )
 
     scan_results = {
-        'libfoo_1.0.0': [
+        'libfoo_1.0.0_local': [
             ScannedDependency(name='libcond', required=True, conditional=True),
         ],
-        'libbar_1.0.0': [
+        'libbar_1.0.0_local': [
             ScannedDependency(name='libcond', required=True, conditional=True),
         ],
     }
@@ -1468,7 +1480,9 @@ def test_resolve_all_per_root_include_scopes_to_root() -> None:
 
 
 def test_get_dependencies_uses_persistent_scan_cache() -> None:
-    """get_dependencies loads from persistent scan cache, skipping _scan_candidate."""
+    """Offline, get_dependencies loads from the persistent scan cache, skipping _scan_candidate.
+    The disk scan cache is name+version-keyed, so it is trusted only offline (online always
+    rescans the resolver-selected repo to avoid cross-origin contamination)."""
     from collider.cache import WrapCache
 
     packages = _make_packages(
@@ -1484,7 +1498,7 @@ def test_get_dependencies_uses_persistent_scan_cache() -> None:
     mock_cache = MagicMock(spec=WrapCache)
     mock_cache.load_scan.return_value = cached_scan
 
-    provider = ColliderProvider(repos, dep_index, wrap_cache=mock_cache)
+    provider = ColliderProvider(repos, dep_index, offline=True, wrap_cache=mock_cache)
     candidate = Candidate('grpc', '1.0.0', 'local')
 
     with patch.object(provider, '_scan_candidate') as mock_scan:
@@ -1570,9 +1584,9 @@ def test_scan_candidate_uses_persistent_archive_cache(tmp_path: Path) -> None:
 
     mock_cache = MagicMock(spec=WrapCache)
     mock_cache.load_wrap.return_value = cached_pkg
-    mock_cache.load_scan.return_value = None
 
-    provider = ColliderProvider(repos, dep_index, offline=False, wrap_cache=mock_cache)
+    # Offline, _scan_candidate loads the cached wrap and stages its archive via wrap_cache.
+    provider = ColliderProvider(repos, dep_index, offline=True, wrap_cache=mock_cache)
     candidate = Candidate('zlib', '1.3.1', 'remote')
 
     provider._scan_candidate(candidate)

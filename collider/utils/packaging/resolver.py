@@ -305,12 +305,18 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
         Scan the candidate's meson.build for dependency() calls and return
         requirements for each dependency that maps to a known package.
         """
-        cache_key = f'{candidate.name}_{candidate.version}'
+        # Key the scan cache by repo too: two repos serving the same name+version are
+        # distinct packages, so reusing one's scan for the other would bake the wrong
+        # dependency graph into collider.lock.
+        cache_key = f'{candidate.name}_{candidate.version}_{candidate.repo_name}'
         if cache_key in self.scan_cache:
             scanned = self.scan_cache[cache_key]
         else:
             scanned = None
-            if self.wrap_cache is not None:
+            # The disk scan cache is keyed by name+version only and cannot tell two repos'
+            # same-versioned packages apart. Trust it only offline (where there is no repo to
+            # re-fetch from); online, always rescan the resolver-selected candidate.
+            if self.offline and self.wrap_cache is not None:
                 scanned = self.wrap_cache.load_scan(candidate.name, candidate.version)
             if scanned is None:
                 scanned = self._scan_candidate(candidate)
@@ -387,10 +393,9 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
                 )
                 return []
         else:
-            if self.wrap_cache is not None:
-                package = self.wrap_cache.load_wrap(candidate.name, candidate.version)
-            if package is None:
-                package = repo.get_package(repo_key)
+            # Online, fetch the wrap from the resolver-selected repo rather than the
+            # name+version-keyed cache, which may hold a same-versioned wrap from another repo.
+            package = repo.get_package(repo_key)
 
         if package is None:
             logger.warning(f'Could not fetch "{candidate.name}" for dependency scan.')
