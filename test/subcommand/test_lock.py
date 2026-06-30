@@ -18,12 +18,13 @@ from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import LockedPackage, Lockfile, compute_wrap_hash
 from collider.Package import WrapPackage
-from collider.repository.entries import RepoPackageEntry, add_wrap_entry
+from collider.repository.entries import RejectReason, RepoPackageEntry, add_wrap_entry
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
 from collider.subcommand.Lock import Lock
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
+from collider.utils.packaging.resolver import MalformedRepositoryMetadata
 
 
 ORIGIN = 'https://wrapdb.example.com/v2'
@@ -112,6 +113,38 @@ def test_lock_creates_lockfile(tmp_path: Path, monkeypatch) -> None:
     assert lockfile.dependencies['shared'].wrap_hash == compute_wrap_hash(package.wrap_text)
     assert lockfile.dependencies['shared'].origin == ORIGIN
     assert not (tmp_path / 'subprojects' / 'shared.wrap').exists()
+
+
+def test_lock_fails_closed_on_malformed_metadata(tmp_path: Path) -> None:
+    """Strict resolution raising MalformedRepositoryMetadata makes lock return EX_DATAERR."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+
+    repo = MagicMock(spec=RepositoryInterface)
+    # A package with provides flips on the transitive resolver path (use_transitive).
+    packages: dict = {}
+    add_wrap_entry(packages, 'shared', '1.0.0', ['libshared'])
+    repo.packages = packages
+    repo.requires_network.return_value = False
+    repo.origin_url = ORIGIN
+    context = _make_context(tmp_path, repo)
+
+    cmd = Lock(argparse.Namespace(offline=False), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.Lock.resolve_all_dependencies',
+            side_effect=MalformedRepositoryMetadata('shared', RejectReason.UNSAFE_VERSION),
+        ):
+            assert cmd.execute() == os.EX_DATAERR
+    finally:
+        os.chdir(cwd)
+
+    assert not (tmp_path / Lockfile.get_filename()).exists()
 
 
 def test_lock_rewrites_existing_lockfile(tmp_path: Path, monkeypatch) -> None:

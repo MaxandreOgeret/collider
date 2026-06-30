@@ -107,8 +107,9 @@ def test_wrap_releases_to_packages_multiple_versions():
         'foo': {'versions': ['1.0.0', '2.0.0']},
         'bar': {'versions': ['0.1.0']},
     }
-    packages = _wrap_releases_to_packages(releases)
+    packages, rejected = _wrap_releases_to_packages(releases)
     assert len(packages) == 3
+    assert rejected == []
 
     key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
     entry = packages[key]
@@ -121,8 +122,9 @@ def test_wrap_releases_to_packages_empty_versions():
     releases = {
         'foo': {'versions': []},
     }
-    packages = _wrap_releases_to_packages(releases)
+    packages, rejected = _wrap_releases_to_packages(releases)
     assert packages == {}
+    assert rejected == []
 
 
 def test_wrap_releases_to_packages_skips_unsafe_name_and_version():
@@ -131,12 +133,14 @@ def test_wrap_releases_to_packages_skips_unsafe_name_and_version():
         '../../evil': {'versions': ['1.0.0']},
         'foo': {'versions': ['1.0.0', '../../evil']},
     }
-    packages = _wrap_releases_to_packages(releases)
+    packages, rejected = _wrap_releases_to_packages(releases)
 
     names = {entry.name for entry in packages.values()}
     versions = {entry.version for entry in packages.values()}
     assert names == {'foo'}
     assert versions == {'1.0.0'}
+    # Both the unsafe name and the unsafe version are recorded as rejects.
+    assert {r.reason.value for r in rejected} == {'unsafe_name', 'unsafe_version'}
 
 
 def test_wrap_url_builder_rejects_unsafe_name():

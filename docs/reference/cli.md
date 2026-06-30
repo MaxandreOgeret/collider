@@ -92,6 +92,14 @@ collider lock [--offline]
 |-------------|-------------------------------------------|
 | `--offline` | Resolve only from the local cache.        |
 
+A repository's `releases.json` is untrusted input. Individual malformed entries
+(non-object shape, unsafe name or version segment) are skipped at the index
+boundary with a single warning, and the rest of the repository still loads. If a
+package the resolver directly needs has no usable version anywhere and its
+metadata was rejected, `lock` refuses to write a lockfile against corrupt data
+and aborts with `EX_DATAERR`. The same fail-closed check applies to `install`
+and `pkg add`.
+
 ---
 
 ## `install`

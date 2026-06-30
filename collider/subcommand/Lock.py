@@ -23,6 +23,7 @@ from collider.utils.packaging.Dependency import DependencySource
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
 from collider.utils.packaging.resolver import (
+    MalformedRepositoryMetadata,
     RootSpec,
     build_dep_name_index,
     resolve_all_dependencies,
@@ -114,10 +115,14 @@ class Lock(InstallSubcommand):
                     roots=root_specs,
                     repos=repos,
                     offline=self.offline,
+                    strict=True,
                     wrap_cache=self.context.cache,
                     include_conditional=any(dep.include_conditional for dep in collider_deps),
                     exclude_optional=any(dep.exclude_optional for dep in collider_deps),
                 )
+            except MalformedRepositoryMetadata as e:
+                logger.critical(f'Refusing to lock against malformed repository metadata: {e}')
+                return os.EX_DATAERR
             except (
                 resolvelib.RequirementsConflicted,
                 resolvelib.ResolutionImpossible,

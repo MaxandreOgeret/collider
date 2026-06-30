@@ -37,7 +37,7 @@ from collider.utils.packaging.repo_key import make_repo_key
 
 
 if TYPE_CHECKING:
-    from collider.repository.entries import RepoPackageEntry
+    from collider.repository.entries import RejectedEntry, RejectReason, RepoPackageEntry
     from collider.repository.implementation.RepositoryInterface import RepositoryInterface
     from collider.utils.packaging.types import RepoKey
 
@@ -92,6 +92,35 @@ class Candidate:
         return f'Candidate({self.name!r}, {self.version!r}, {self.repo_name!r})'
 
 
+class MalformedRepositoryMetadata(Exception):
+    """
+    A package the resolver actually needs has no usable version because its repository metadata was
+    rejected. Raised only in strict resolution (lock/install/add) so trust-sensitive operations fail
+    closed instead of silently dropping the dependency.
+    """
+
+    def __init__(self, name: str, reason: 'RejectReason'):
+        self.name = name
+        self.reason = reason
+        super().__init__(f'Repository metadata for "{name}" is malformed ({reason.value}).')
+
+
+def build_rejected_name_index(
+    repos: dict[str, 'RepositoryInterface'],
+) -> dict[str, 'RejectedEntry']:
+    """
+    Index rejected releases entries by package name.
+    :param repos: Configured repositories keyed by name.
+    :return: Map from rejected package name to its first reject record.
+    """
+    index: dict[str, 'RejectedEntry'] = {}
+    for repo in repos.values():
+        for rejected in getattr(repo, 'rejected_metadata', []):
+            if rejected.name:
+                index.setdefault(rejected.name, rejected)
+    return index
+
+
 def build_dep_name_index(
     repos: dict[str, 'RepositoryInterface'],
 ) -> dict[str, str]:
@@ -123,6 +152,7 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
         dep_name_index: dict[str, str],
         *,
         offline: bool = False,
+        strict: bool = False,
         wrap_cache: Optional['WrapCache'] = None,
         include_conditional: bool = False,
         exclude_optional: bool = False,
@@ -134,6 +164,12 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
         self.repos = repos
         self.dep_name_index = dep_name_index
         self.offline = offline
+        self.strict = strict
+        # Strict resolution maps a needed package name back to metadata rejected at the index
+        # boundary, so trust-sensitive ops fail closed instead of silently dropping the dependency.
+        # Scoped to package names only: an unmapped dependency() name is indistinguishable from a
+        # system dependency, so keying fail-closed on attacker-declared provides would be a DoS.
+        self.rejected_by_name = build_rejected_name_index(repos) if strict else {}
         self.wrap_cache = wrap_cache
         self.include_conditional = include_conditional
         self.exclude_optional = exclude_optional
@@ -180,6 +216,16 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
         candidates = self._collect_matches(all_matches, reqs, bad, allow_prereleases=False)
         if not candidates:
             candidates = self._collect_matches(all_matches, reqs, bad, allow_prereleases=True)
+
+        # Fail closed when a needed package has no usable version anywhere AND its metadata was
+        # rejected: the rejection is why it is unresolvable, so surface that instead of a generic
+        # "no matching version". A package that still has valid versions is left to normal
+        # resolution (and was already warned about), so one bad sibling never breaks the build.
+        if self.strict and identifier in self.rejected_by_name:
+            total_indexed = sum(len(pkgs) for pkgs in all_matches.values())
+            if total_indexed == 0:
+                rejected = self.rejected_by_name[identifier]
+                raise MalformedRepositoryMetadata(identifier, rejected.reason)
 
         candidates.sort(key=lambda x: x[0], reverse=True)
         return [c for _, c in candidates]
@@ -557,6 +603,7 @@ def resolve_dependencies(
     repos: dict[str, 'RepositoryInterface'],
     *,
     offline: bool = False,
+    strict: bool = False,
     wrap_cache: Optional['WrapCache'] = None,
     include_conditional: bool = False,
     exclude_optional: bool = False,
@@ -569,12 +616,15 @@ def resolve_dependencies(
     :param root_version_spec: Optional version constraint string.
     :param repos: Configured repositories.
     :param offline: Disable network access during scanning.
+    :param strict: Fail closed on malformed metadata for a needed dependency.
     :param wrap_cache: Local wrap cache for offline resolution.
     :param include_conditional: Include conditional deps.
     :param exclude_optional: Exclude optional deps.
     :param include_names: Force-include specific dep names.
     :param exclude_names: Force-exclude specific dep names.
     :return: ResolutionResult with mapping and summary.
+    :raises MalformedRepositoryMetadata: In strict mode, when a needed dependency is unresolvable
+        because its repository metadata was rejected.
     """
     dep_name_index = build_dep_name_index(repos)
 
@@ -582,6 +632,7 @@ def resolve_dependencies(
         repos,
         dep_name_index,
         offline=offline,
+        strict=strict,
         wrap_cache=wrap_cache,
         include_conditional=include_conditional,
         exclude_optional=exclude_optional,
@@ -623,6 +674,7 @@ def resolve_all_dependencies(
     repos: dict[str, 'RepositoryInterface'],
     *,
     offline: bool = False,
+    strict: bool = False,
     wrap_cache: Optional['WrapCache'] = None,
     include_conditional: bool = False,
     exclude_optional: bool = False,
@@ -633,10 +685,13 @@ def resolve_all_dependencies(
     :param roots: Root packages to resolve together.
     :param repos: Configured repositories.
     :param offline: Disable network access during scanning.
+    :param strict: Fail closed on malformed metadata for a needed dependency.
     :param wrap_cache: Local wrap cache for offline resolution.
     :param include_conditional: Include conditional deps.
     :param exclude_optional: Exclude optional deps.
     :return: ResolutionResult with a unified mapping and summary.
+    :raises MalformedRepositoryMetadata: In strict mode, when a needed dependency is unresolvable
+        because its repository metadata was rejected.
     """
     root_overrides: dict[str, tuple[Optional[set[str]], Optional[set[str]]]] = {}
     for root in roots:
@@ -649,6 +704,7 @@ def resolve_all_dependencies(
         repos,
         dep_name_index,
         offline=offline,
+        strict=strict,
         wrap_cache=wrap_cache,
         include_conditional=include_conditional,
         exclude_optional=exclude_optional,
