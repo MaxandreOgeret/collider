@@ -8,9 +8,13 @@ from pathlib import Path
 import pytest
 
 from collider.file_model.colliderfile import Colliderfile
-from collider.file_model.lockfile import LockedPackage, Lockfile
+from collider.file_model.lockfile import LockedPackage, Lockfile, compute_wrap_hash
 from collider.utils.packaging.Dependency import Dependency, DependencySource
-from collider.utils.project_state import collect_force_fallback_names, managed_package_names
+from collider.utils.project_state import (
+    collect_force_fallback_names,
+    detect_locked_wrap_drift,
+    managed_package_names,
+)
 
 
 _ORIGIN = 'https://wrapdb.example.com/v2/'
@@ -160,3 +164,72 @@ def test_managed_names_tolerates_malformed_colliderfile(tmp_path: Path) -> None:
     ).save(tmp_path / Lockfile.get_filename())
     (tmp_path / Colliderfile.get_filename()).write_text('{ not valid json', encoding='utf-8')
     assert managed_package_names(tmp_path) == {'foo'}
+
+
+def _lock_with(tmp_path: Path, **packages: str) -> None:
+    """Save a lockfile pinning each package name to the given wrap_hash."""
+    Lockfile(
+        dependencies={
+            name: LockedPackage(version='1.0', wrap_hash=wrap_hash, origin=_ORIGIN)
+            for name, wrap_hash in packages.items()
+        }
+    ).save(tmp_path / Lockfile.get_filename())
+
+
+def test_drift_returns_empty_without_lock(tmp_path: Path) -> None:
+    """No lock means nothing to compare against, even when a wrap is present."""
+    _write_wrap(tmp_path / 'subprojects', 'foo', _wrap_file_text('foo'))
+    assert detect_locked_wrap_drift(tmp_path) == []
+
+
+def test_drift_empty_when_hash_matches(tmp_path: Path) -> None:
+    """A wrap whose bytes match the locked hash is not drift."""
+    text = _wrap_file_text('foo')
+    _write_wrap(tmp_path / 'subprojects', 'foo', text)
+    _lock_with(tmp_path, foo=compute_wrap_hash(text))
+    assert detect_locked_wrap_drift(tmp_path) == []
+
+
+def test_drift_detects_modified_wrap(tmp_path: Path) -> None:
+    """A wrap whose bytes differ from the locked hash is reported as drift."""
+    _write_wrap(tmp_path / 'subprojects', 'foo', _wrap_file_text('foo'))
+    _lock_with(tmp_path, foo='sha256:' + '0' * 64)
+    assert detect_locked_wrap_drift(tmp_path) == ['foo']
+
+
+def test_drift_ignores_missing_wrap(tmp_path: Path) -> None:
+    """A locked package with no wrap on disk is not drift (missing is a separate concern)."""
+    _lock_with(tmp_path, foo='sha256:' + '0' * 64)
+    assert detect_locked_wrap_drift(tmp_path) == []
+
+
+def test_drift_reports_only_modified_sorted(tmp_path: Path) -> None:
+    """Only mismatching wraps are reported, sorted, with matching ones excluded."""
+    subprojects = tmp_path / 'subprojects'
+    fmt_text = _wrap_file_text('fmt')
+    _write_wrap(subprojects, 'fmt', fmt_text)
+    _write_wrap(subprojects, 'bar', _wrap_file_text('bar'))
+    _write_wrap(subprojects, 'baz', _wrap_file_text('baz'))
+    _lock_with(
+        tmp_path,
+        fmt=compute_wrap_hash(fmt_text),  # matches: not drift
+        bar='sha256:' + '0' * 64,  # drift
+        baz='sha256:' + '1' * 64,  # drift
+    )
+    assert detect_locked_wrap_drift(tmp_path) == ['bar', 'baz']
+
+
+def test_drift_treats_non_utf8_wrap_as_drift(tmp_path: Path) -> None:
+    """A non-UTF-8 wrap cannot match a UTF-8-hashed lock entry, so it counts as drift."""
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir(parents=True)
+    (subprojects / 'foo.wrap').write_bytes(b'\xff\xfe[wrap-file]\x00')
+    _lock_with(tmp_path, foo='sha256:' + '0' * 64)
+    assert detect_locked_wrap_drift(tmp_path) == ['foo']
+
+
+def test_drift_raises_on_malformed_lock(tmp_path: Path) -> None:
+    """A malformed lock is a hard error, mirroring managed_package_names."""
+    (tmp_path / Lockfile.get_filename()).write_text('{ not valid json', encoding='utf-8')
+    with pytest.raises(ValueError, match='malformed'):
+        detect_locked_wrap_drift(tmp_path)

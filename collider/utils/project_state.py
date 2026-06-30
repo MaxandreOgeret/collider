@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from collider.file_model.colliderfile import Colliderfile
-from collider.file_model.lockfile import Lockfile
+from collider.file_model.lockfile import Lockfile, compute_wrap_hash
 from collider.log import logger
 from collider.Package import get_provide_names
 from collider.utils.meson import SUBPROJECTS_DIR
@@ -122,6 +122,46 @@ def managed_package_names(sourcedir: Path) -> Optional[set[str]]:
             dep.name for dep in colliderfile.dependencies if dep.source == DependencySource.COLLIDER
         }
     return names
+
+
+def detect_locked_wrap_drift(sourcedir: Path) -> list[str]:
+    """
+    Find locked wraps whose on-disk bytes no longer match collider.lock.
+    Only wraps that are recorded in the lock and present on disk are compared; a missing wrap
+    is not treated as drift here (Meson resolution and `collider status` cover that case). The
+    hash is taken over the .wrap file text only, so this detects edits to the wrap descriptor,
+    not changes to the extracted subproject source tree.
+    :param sourcedir: Project source directory.
+    :return: Sorted names of wraps that drifted from the lock; empty when none or no lock.
+    :raises ValueError: When collider.lock exists but cannot be parsed.
+    """
+    lock_path = sourcedir / Lockfile.get_filename()
+    if not lock_path.exists():
+        return []
+
+    try:
+        lockfile = Lockfile.from_path(lock_path)
+    except Exception as exc:
+        raise ValueError(f'collider.lock is malformed: {exc}') from exc
+
+    subprojects_dir = sourcedir / SUBPROJECTS_DIR
+    drifted: list[str] = []
+    for name, locked in lockfile.all_packages.items():
+        wrap_path = subprojects_dir / f'{name}.wrap'
+        if not wrap_path.is_file():
+            continue
+        try:
+            wrap_text = wrap_path.read_text(encoding='utf-8')
+        except OSError as exc:
+            logger.debug(f'Cannot read "{wrap_path}" for drift check, skipping: {exc}')
+            continue
+        except UnicodeDecodeError:
+            # A non-UTF-8 wrap can never match a UTF-8-hashed lock entry, so it is drift.
+            drifted.append(name)
+            continue
+        if compute_wrap_hash(wrap_text) != locked.wrap_hash:
+            drifted.append(name)
+    return sorted(drifted)
 
 
 def collect_force_fallback_names(
