@@ -16,7 +16,7 @@ Brief description of the change.
 - [ ] Tests pass (`uv run pytest`).
 - [ ] Format, lint, type, and static checks pass (`uv run ruff format --check .`, `uv run ruff check .`, `uv run ty check collider`, `uv run pylint --rcfile=pyproject.toml ./collider`).
 
-## AI disclosure
+## AI disclosure (Tick all that apply)
 
 - [ ] AI tools were used for part or all of this change.
   - [ ] A **human** (not an AI agent) has reviewed every line, understands the change, and takes full responsibility for what is submitted.
