@@ -14,6 +14,7 @@ from collider.utils.project_state import (
     collect_force_fallback_names,
     detect_locked_wrap_drift,
     managed_package_names,
+    remove_installed_artifacts,
 )
 
 
@@ -233,3 +234,169 @@ def test_drift_raises_on_malformed_lock(tmp_path: Path) -> None:
     (tmp_path / Lockfile.get_filename()).write_text('{ not valid json', encoding='utf-8')
     with pytest.raises(ValueError, match='malformed'):
         detect_locked_wrap_drift(tmp_path)
+
+
+# -- remove_installed_artifacts (#45) -----------------------------------------
+
+
+def _absent_directory_wrap() -> str:
+    """A [wrap-file] with no `directory` key, so Meson defaults to the wrap stem."""
+    return (
+        '[wrap-file]\n'
+        'source_url = https://example.invalid/x.tar.gz\n'
+        'source_filename = x.tar.gz\n'
+        f'source_hash = {"0" * 64}\n'
+    )
+
+
+def test_remove_artifacts_deletes_directory_field_tree(tmp_path: Path, monkeypatch) -> None:
+    """The extracted tree named by `directory=` (not <name>) is removed."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'fmt', _wrap_file_text('fmt-10.0.0'))
+    tree = subprojects / 'fmt-10.0.0'
+    tree.mkdir()
+    (tree / 'meson.build').write_text('project()', encoding='utf-8')
+
+    assert remove_installed_artifacts('fmt') is True
+    assert not (subprojects / 'fmt.wrap').exists()
+    assert not tree.exists()
+
+
+def test_remove_artifacts_clears_legacy_and_directory_field(tmp_path: Path, monkeypatch) -> None:
+    """Both the legacy <name> dir and the `directory=` target are removed when both exist."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'fmt', _wrap_file_text('fmt-10.0.0'))
+    (subprojects / 'fmt').mkdir()
+    (subprojects / 'fmt-10.0.0').mkdir()
+
+    assert remove_installed_artifacts('fmt') is True
+    assert not (subprojects / 'fmt').exists()
+    assert not (subprojects / 'fmt-10.0.0').exists()
+
+
+def test_remove_artifacts_absent_directory_uses_name(tmp_path: Path, monkeypatch) -> None:
+    """With no `directory=`, the <name> tree (Meson's default) is removed."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'foo', _absent_directory_wrap())
+    (subprojects / 'foo').mkdir()
+
+    assert remove_installed_artifacts('foo') is True
+    assert not (subprojects / 'foo').exists()
+
+
+def test_remove_artifacts_blank_directory_falls_back(tmp_path: Path, monkeypatch) -> None:
+    """A blank `directory=` is treated as absent, falling back to the <name> tree."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'foo', _wrap_file_text(''))
+    (subprojects / 'foo').mkdir()
+
+    assert remove_installed_artifacts('foo') is True
+    assert not (subprojects / 'foo').exists()
+
+
+def test_remove_artifacts_never_deletes_packagecache(tmp_path: Path, monkeypatch) -> None:
+    """A wrap declaring `directory = packagecache` must not delete the shared archive cache."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'evil', _wrap_file_text('packagecache'))
+    pkgcache = subprojects / 'packagecache'
+    pkgcache.mkdir()
+    (pkgcache / 'shared.tar.gz').write_text('archive', encoding='utf-8')
+
+    assert remove_installed_artifacts('evil') is True  # the .wrap is still removed
+    assert (pkgcache / 'shared.tar.gz').exists()
+
+
+def test_remove_artifacts_packagecache_guard_is_case_insensitive(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """`directory = PackageCache` must not wipe the cache on a case-insensitive filesystem."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'evil', _wrap_file_text('PackageCache'))
+    pkgcache = subprojects / 'packagecache'
+    pkgcache.mkdir()
+    (pkgcache / 'shared.tar.gz').write_text('archive', encoding='utf-8')
+
+    assert remove_installed_artifacts('evil') is True
+    assert (pkgcache / 'shared.tar.gz').exists()
+
+
+def test_remove_artifacts_directory_equals_name(tmp_path: Path, monkeypatch) -> None:
+    """When `directory=` equals the package name the tree is removed once, not twice."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'foo', _wrap_file_text('foo'))
+    (subprojects / 'foo').mkdir()
+
+    assert remove_installed_artifacts('foo') is True
+    assert not (subprojects / 'foo').exists()
+
+
+def test_remove_artifacts_refuses_unsafe_directory(tmp_path: Path, monkeypatch) -> None:
+    """An unsafe `directory=` (path traversal) deletes nothing outside subprojects/."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'foo', _wrap_file_text('../evil'))
+    outside = tmp_path / 'evil'
+    outside.mkdir()
+    (outside / 'keep.txt').write_text('precious', encoding='utf-8')
+
+    assert remove_installed_artifacts('foo') is True  # the .wrap is still removed
+    assert (outside / 'keep.txt').exists()
+
+
+def test_remove_artifacts_refuses_unsafe_package_name(tmp_path: Path, monkeypatch) -> None:
+    """An unsafe package name (path traversal) deletes nothing outside subprojects/."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'subprojects').mkdir()
+    victim_wrap = tmp_path / 'victim.wrap'
+    victim_wrap.write_text('precious', encoding='utf-8')
+    victim_dir = tmp_path / 'victim'
+    victim_dir.mkdir()
+    (victim_dir / 'keep.txt').write_text('precious', encoding='utf-8')
+
+    assert remove_installed_artifacts('../victim') is False
+    assert victim_wrap.exists()
+    assert (victim_dir / 'keep.txt').exists()
+
+
+def test_remove_artifacts_unlinks_symlink_without_following(tmp_path: Path, monkeypatch) -> None:
+    """A symlinked subproject target is unlinked, never rmtree'd through."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'foo', _wrap_file_text('foo-1.0'))
+    real = tmp_path / 'real_tree'
+    real.mkdir()
+    (real / 'keep.txt').write_text('precious', encoding='utf-8')
+    link = subprojects / 'foo-1.0'
+    link.symlink_to(real, target_is_directory=True)
+
+    assert remove_installed_artifacts('foo') is True
+    assert not link.is_symlink()
+    assert (real / 'keep.txt').exists()
+
+
+def test_remove_artifacts_falls_back_when_wrap_unreadable(tmp_path: Path, monkeypatch) -> None:
+    """An unparseable wrap falls back to the <name> tree rather than crashing."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir(parents=True)
+    (subprojects / 'foo.wrap').write_text('not a valid ini {{{', encoding='utf-8')
+    (subprojects / 'foo').mkdir()
+
+    assert remove_installed_artifacts('foo') is True
+    assert not (subprojects / 'foo').exists()
+    assert not (subprojects / 'foo.wrap').exists()
+
+
+def test_remove_artifacts_returns_false_when_nothing_present(tmp_path: Path, monkeypatch) -> None:
+    """Removing a package with no wrap and no tree reports that nothing was removed."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'subprojects').mkdir()
+
+    assert remove_installed_artifacts('absent') is False

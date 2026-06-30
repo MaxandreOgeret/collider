@@ -60,6 +60,24 @@ def get_provide_names(wrap_text: str) -> list[str]:
     return sorted(names)
 
 
+def read_wrap_directory(wrap_text: str) -> Optional[str]:
+    """
+    Return the subproject directory a wrap extracts into, or None when it is unset.
+    Meson reads ``directory`` from the wrap's ``[wrap-file]`` or ``[wrap-git]`` section and
+    otherwise defaults to the wrap filename stem; a blank value is treated as unset. The value
+    is returned verbatim and is NOT validated as a safe path segment.
+    :param wrap_text: Raw wrap file contents.
+    :return: The declared directory name, or None when absent or blank.
+    """
+    parser = _parse_wrap(wrap_text)
+    for kind in ('wrap-file', 'wrap-git'):
+        if parser.has_section(kind):
+            value = parser[kind].get('directory', '').strip()
+            if value:
+                return value
+    return None
+
+
 @dataclass(frozen=True)
 class WrapPackage:  # pylint: disable=too-many-instance-attributes
     """Wrap metadata required to resolve and cache Meson dependencies."""
