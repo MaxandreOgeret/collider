@@ -105,6 +105,21 @@ incompatibilities during install:
 
 Run `collider lock` to re-resolve and clear these warnings.
 
+## Untrusted Repository Metadata
+
+A repository's `releases.json` is treated as untrusted input. Malformed
+individual entries (non-object shape, unsafe name or version segment) are skipped
+at the index boundary with a warning, and the rest of the repository still loads.
+If a package the resolver directly needs has no usable version anywhere and its
+metadata was rejected, `lock`, `install`, and `pkg add` fail closed with
+`EX_DATAERR` rather than resolving against corrupt data.
+
+When two configured repositories publish the same name and version, resolution
+reads are scoped to the repository the resolver selected: online, Collider
+fetches each candidate's wrap and dependency scan from that repository rather
+than reusing a name+version cache entry. This keeps one repository's contents
+from steering another's resolved dependency graph into `collider.lock`.
+
 ## Relationship Between Intent and Resolution
 
 | File             | Purpose                                                  |
