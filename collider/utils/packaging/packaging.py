@@ -10,6 +10,8 @@ import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
 from collider.log import logger
 from collider.utils.meson.infoTypes import DependencyInfo
 
@@ -29,6 +31,34 @@ def compute_file_hash(file: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
+
+
+def parse_version_constraint(text: str, *, prefix: bool = False) -> SpecifierSet:
+    """
+    Parse a version constraint, promoting a bare version to a specifier.
+    Users naturally write `--version 1.2.13`, but packaging requires an operator. For pinning
+    (add/upgrade) a bare version becomes an exact `==1.2.13`. For discovery (search) `prefix`
+    promotes it to `==1.2.13.*` so revision-suffixed releases like `1.2.13-1` are still matched;
+    versions that cannot form a prefix match (e.g. a full `1.2.13-1` tag) fall back to exact.
+    :param text: Raw version constraint (e.g. "1.2.13", "==1.2.13", ">=1,<2").
+    :param prefix: Promote a bare version to a prefix match (`==X.*`) instead of an exact pin.
+    :return: Parsed specifier set.
+    :raises InvalidSpecifier: When the text is empty or neither a valid specifier nor a bare version.
+    """
+    if not text.strip():
+        # An empty constraint would parse to a match-everything specifier and persist as "";
+        # reject it so the user gets a clear error instead of a meaningless stored intent.
+        raise InvalidSpecifier(f'Empty version constraint "{text}".')
+    try:
+        return SpecifierSet(text)
+    except InvalidSpecifier:
+        if prefix:
+            try:
+                return SpecifierSet(f'=={text}.*')
+            except InvalidSpecifier:
+                # A version with a pre/post/local segment cannot prefix-match; pin it exactly.
+                pass
+        return SpecifierSet(f'=={text}')
 
 
 def validate_dependencies(

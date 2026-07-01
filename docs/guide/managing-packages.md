@@ -78,9 +78,17 @@ Pin a version range with `--version`:
 collider pkg add my-lib --version '>=1.2,<2.0'
 ```
 
+A bare version is treated as an exact pin: `--version 1.2.13` means `==1.2.13`.
 The constraint is stored in `collider.json` and enforced on future operations.
 If `collider.json` already declares a constraint for the package, it is used
 automatically.
+
+!!! warning "Wrap revision suffixes"
+    Repository versions often carry a wrap-revision suffix such as `1.2.13-1`,
+    which PEP 440 reads as `1.2.13.post1`, so an exact pin like `==1.2.13` does
+    not match `1.2.13-1`. Pin the full tag (`==1.2.13-1`) or use a range
+    (`>=1.2.13,<1.2.14`). `collider pkg search my-lib --version 1.2.13` lists the
+    matching revisions, since search widens a bare version to `==1.2.13.*`.
 
 ### Offline Mode
 

@@ -59,6 +59,12 @@ def test_search_register():
     assert args.pattern == '.*'
     assert args.repository == ['repo1', 'repo2']
 
+    # A bare version becomes a prefix match so revision-suffixed releases (1.2.13-1) are found.
+    args = parser.parse_args(['my-pkg', '--version', '1.2.13'])
+    assert isinstance(args.version, SpecifierSet)
+    assert str(args.version) == '==1.2.13.*'
+    assert args.version.contains('1.2.13-1')
+
 
 def test_search_init(mock_context):
     """Test Search initialization and regex compilation."""

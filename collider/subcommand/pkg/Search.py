@@ -22,7 +22,18 @@ from collider.repository.entries import RepoPackageEntry
 from collider.repository.repository import search_packages
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
+from collider.utils.packaging import parse_version_constraint
 from collider.utils.repository_selection import add_repository_filter_argument, resolve_repositories
+
+
+def parse_search_version(text: str) -> SpecifierSet:
+    """
+    Argparse type for `search --version`: a bare version becomes a prefix match.
+    A named wrapper (rather than functools.partial) keeps argparse's error message clean.
+    :param text: Raw version constraint.
+    :return: Parsed specifier set, with a bare version widened to `==X.*`.
+    """
+    return parse_version_constraint(text, prefix=True)
 
 
 class Search(SubcommandInterface):
@@ -60,9 +71,10 @@ class Search(SubcommandInterface):
         parser.add_argument(
             '--version',
             '-v',
-            type=SpecifierSet,
+            type=parse_search_version,
             required=False,
-            help='Version pattern to search for. Follows PEP0440 version specifiers.',
+            help='Version pattern to search for (PEP 440 specifiers; a bare version like '
+            '1.2.13 matches every 1.2.13.* revision, including 1.2.13-1).',
         )
 
         parser.add_argument(

@@ -13,6 +13,10 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from packaging.specifiers import SpecifierSet
+
 from collider.cache import WrapCache
 from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
@@ -38,17 +42,18 @@ def _make_context(tmp_path: Path, repos: dict[str, RepositoryInterface]) -> Cont
     return Context(config=config, cache=WrapCache(tmp_path / 'cache'), offline=False)
 
 
-def _add_args(package: str, *, offline: bool = False) -> argparse.Namespace:
+def _add_args(package: str, *, offline: bool = False, version: object = None) -> argparse.Namespace:
     """
     Build the argparse namespace pkg add expects.
     :param package: Package name to add.
     :param offline: Whether to run in offline mode.
+    :param version: Optional parsed version constraint (SpecifierSet).
     :return: Namespace with all flags Add reads.
     """
     return argparse.Namespace(
         package=package,
         offline=offline,
-        version=None,
+        version=version,
         include=None,
         exclude=None,
         include_conditional=False,
@@ -115,6 +120,36 @@ def test_pkg_add_ex_unavailable_no_matching_package(tmp_path: Path) -> None:
     with patch('collider.subcommand.pkg.Add.search_packages', return_value={}):
         assert cmd.execute() == os.EX_UNAVAILABLE
     assert not (tmp_path / Colliderfile.get_filename()).exists()
+
+
+def test_pkg_add_lists_available_versions_when_pin_matches_nothing(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A version pin that matches nothing surfaces the versions the repositories actually offer."""
+    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    context = _make_context(tmp_path, {'repo1': repo})
+    cmd = Add(_add_args('zlib', version=SpecifierSet('==1.2.13')), context)
+
+    zlib_key = make_repo_key('zlib', '1.2.13-1', PackageType.WRAP)
+    zlib_entry = RepoPackageEntry('zlib', '1.2.13-1', PackageType.WRAP)
+
+    def search_side_effect(_repos, _pattern, version_spec=None):
+        # The constrained search excludes 1.2.13-1 (==1.2.13.post1); the unconstrained
+        # re-search surfaces it so the guidance can point the user at the real tag.
+        if version_spec is None:
+            return {'repo1': {zlib_key: zlib_entry}}
+        return {}
+
+    os.chdir(tmp_path)
+    with patch('collider.subcommand.pkg.Add.search_packages', side_effect=search_side_effect):
+        assert cmd.execute() == os.EX_UNAVAILABLE
+
+    assert 'No package "zlib" found matching version constraint "==1.2.13".' in caplog.text
+    assert '1.2.13-1' in caplog.text
 
 
 def test_pkg_add_ex_ioerr_offline_missing_cache(tmp_path: Path) -> None:

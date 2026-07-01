@@ -30,6 +30,7 @@ from collider.utils.compat import override
 from collider.utils.core import assert_safe_path_segment
 from collider.utils.meson import SUBPROJECTS_DIR
 from collider.utils.meson.project import validate_meson_project_cwd
+from collider.utils.packaging import parse_version_constraint
 from collider.utils.packaging.Dependency import DependencySource
 from collider.utils.packaging.types import RepoKey
 from collider.utils.project_state import (
@@ -81,9 +82,10 @@ class Upgrade(SubcommandInterface):
         parser.add_argument(
             '--version',
             '-v',
-            type=SpecifierSet,
+            type=parse_version_constraint,
             required=False,
-            help='Version constraint to persist before upgrading the selected package.',
+            help='Version constraint to persist before upgrading the selected package '
+            '(a bare version like 1.2.13 is treated as ==1.2.13).',
         )
         parser.add_argument(
             '--offline',
@@ -161,9 +163,9 @@ class Upgrade(SubcommandInterface):
         result = self._find_newest_package(package_name, repos, version_spec)
         if result is None:
             constraint_suffix = (
-                f' matching version constraint "{version_text}".' if version_text else '.'
+                f' matching version constraint "{version_text}"' if version_text else ''
             )
-            logger.critical(f'No package matching query{constraint_suffix}')
+            logger.critical(f'No package "{package_name}" found{constraint_suffix}.')
             return os.EX_UNAVAILABLE
 
         entry, _repo_name, repo, repo_key = result

@@ -43,8 +43,8 @@ collider install --offline
     `Offline mode requires cached wrap releases.`. This is not a clean hard-fail:
     config loading catches the error, logs
     `Failed to load repository "<name>": ...`, and skips
-    the repository. The failure surfaces downstream instead, for example as
-    `No package matching query` with exit code `EX_UNAVAILABLE` when no other
+    the repository. The failure surfaces downstream instead, for example as a
+    no-match resolution error with exit code `EX_UNAVAILABLE` when no other
     repository can satisfy the request. Filesystem repositories are unaffected.
 
 In offline mode, Collider:

@@ -127,6 +127,9 @@ indent-style = "space"
 "__init__.py" = ["F401", "F403"]   # Allow unused imports for package convenience.
 "conftest.py" = ["F401", "F403"]   # Fixtures are often imported but unused.
 
+[tool.bandit]
+skips = ["B404"]
+
 [tool.uv]
 default-groups = ["dev", "docs"]
 

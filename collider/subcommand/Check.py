@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import configparser
 import os
+import subprocess
 
 from pathlib import Path
 
@@ -95,7 +96,13 @@ class Check(SubcommandInterface):
             return os.EX_NOINPUT
 
         colliderfile = Colliderfile.from_path(colliderfile_path)
-        scanned = scan_dependencies(meson_build)
+        try:
+            scanned = scan_dependencies(meson_build)
+        except subprocess.CalledProcessError as e:
+            # A failing introspect means the user's meson.build is broken, not collider; report it
+            # cleanly like setup does instead of routing to the "bug in collider" handler.
+            logger.critical(f'meson introspect failed: {e}')
+            return os.EX_SOFTWARE
         filtered = filter_dependencies(scanned, include_conditional=self.include_conditional)
 
         dep_name_index = self._build_dependency_name_index()
