@@ -30,6 +30,7 @@ from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.core import assert_safe_path_segment
 from collider.utils.meson import SUBPROJECTS_DIR
+from collider.utils.packaging import parse_version_constraint
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.PackageType import PackageType
 from collider.utils.packaging.repo_key import make_repo_key
@@ -75,9 +76,10 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
         parser.add_argument(
             '--version',
             '-v',
-            type=SpecifierSet,
+            type=parse_version_constraint,
             required=False,
-            help='Version constraint to resolve and persist in collider.json.',
+            help='Version constraint to resolve and persist in collider.json '
+            '(a bare version like 1.2.13 is treated as ==1.2.13).',
         )
         parser.add_argument(
             '--offline',
@@ -202,12 +204,7 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
         logger.debug(f'Searching across {len(repos)} repositories for "{self.package_name}".')
         newest = self._find_newest_package(repos, version_spec)
         if newest is None:
-            constraint_suffix = (
-                f' matching version constraint "{version_spec_str}".'
-                if version_spec_str is not None
-                else '.'
-            )
-            logger.critical(f'No package matching query{constraint_suffix}')
+            self._report_no_match(repos, version_spec_str)
             return os.EX_UNAVAILABLE
 
         newest_entry, newest_repo_name, newest_repo, newest_key = newest
@@ -353,6 +350,56 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
         assert newest_key is not None
 
         return newest_entry, newest_repo_name, newest_repo, newest_key
+
+    def _report_no_match(
+        self, repos: dict[str, RepositoryInterface], version_spec_str: Optional[str]
+    ) -> None:
+        """
+        Report a failed resolution and, when a version constraint excluded every candidate,
+        list the versions the repositories actually offer.
+        Repository versions often carry a wrap-revision suffix (e.g. "1.2.13-1"), which a bare
+        exact pin like "==1.2.13" does not match, so surfacing the real versions points the user
+        at a working constraint.
+        :param repos: Configured repositories to re-search without the version constraint.
+        :param version_spec_str: The version constraint that excluded all candidates, if any.
+        """
+        constraint = (
+            f' matching version constraint "{version_spec_str}"'
+            if version_spec_str is not None
+            else ''
+        )
+        logger.critical(f'No package "{self.package_name}" found{constraint}.')
+
+        if version_spec_str is None:
+            return
+
+        available = self._available_versions(repos)
+        if not available:
+            return
+
+        shown = ', '.join(available[:10])
+        suffix = ' (and more)' if len(available) > 10 else ''
+        logger.info(f'"{self.package_name}" is available at: {shown}{suffix}.')
+        logger.info(
+            'Repository versions may carry a wrap-revision suffix (e.g. "1.2.13-1"); '
+            'an exact pin such as "==1.2.13" will not match "1.2.13-1".'
+        )
+
+    def _available_versions(self, repos: dict[str, RepositoryInterface]) -> list[str]:
+        """
+        Collect this package's versions across all repositories, newest first.
+        :param repos: Configured repositories to search without a version constraint.
+        :return: Distinct version strings ordered from newest to oldest (unparseable ones dropped).
+        """
+        matches = search_packages(repos, re.compile(f'^{re.escape(self.package_name)}$'))
+        parseable: dict[str, packaging.version.Version] = {}
+        for packages in matches.values():
+            for package in packages.values():
+                try:
+                    parseable[package.version] = packaging.version.parse(package.version)
+                except InvalidVersion:
+                    continue
+        return sorted(parseable, key=lambda raw: parseable[raw], reverse=True)
 
     def _install_package(
         self,

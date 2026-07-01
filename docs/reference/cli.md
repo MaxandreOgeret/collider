@@ -239,7 +239,7 @@ collider pkg add <name> [--version SPEC] [--offline] [--force]
 | Option               | Description                                              |
 |----------------------|----------------------------------------------------------|
 | `<name>`             | Package name.                                            |
-| `--version`, `-v` `SPEC` | Version constraint (e.g. `>=1.2,<2.0`).             |
+| `--version`, `-v` `SPEC` | Version constraint (e.g. `>=1.2,<2.0`); a bare version like `1.2.13` is an exact `==1.2.13` pin. |
 | `--offline`          | Resolve from cache only.                                 |
 | `--force`, `-f`      | Reinstall even if the package is already installed.      |
 | `--include PKG`      | Force-include a transitive dependency by name (repeatable). |
@@ -311,7 +311,7 @@ collider pkg search <pattern> [--cache] [--repository NAME] ... [--version SPEC]
 | `<pattern>`         | Regular expression matched against package names.    |
 | `--cache`           | Search only cached wraps without accessing repositories. |
 | `--repository`, `-r` `NAME` | Restrict search to specific repositories (repeatable). |
-| `--version`, `-v` `SPEC` | Filter by version constraint.                   |
+| `--version`, `-v` `SPEC` | Filter by version constraint; a bare version like `1.2.13` matches every `1.2.13.*` revision (including `1.2.13-1`). |
 
 ---
 
@@ -343,7 +343,7 @@ collider pkg upgrade [<name>] [--version SPEC] [--offline]
 | Option          | Description                                              |
 |-----------------|----------------------------------------------------------|
 | `<name>`        | Package to upgrade. Omit to upgrade all.                 |
-| `--version`, `-v` `SPEC` | New version constraint (only valid with a package name). |
+| `--version`, `-v` `SPEC` | New version constraint (only valid with a package name); a bare version like `1.2.13` is an exact `==1.2.13` pin. |
 | `--offline`     | Resolve from cache only.                                 |
 
 Does not update `collider.lock`.
