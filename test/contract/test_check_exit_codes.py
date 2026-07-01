@@ -4,6 +4,7 @@
 """Exit-code contract tests for the collider "check" command."""
 
 import os
+import subprocess
 
 from pathlib import Path
 from unittest.mock import patch
@@ -54,6 +55,19 @@ def test_check_ex_ok_clean(tmp_path: Path) -> None:
         return_value=[ScannedDependency('fmt', required=True)],
     ):
         assert _run_check(tmp_path) == os.EX_OK
+
+
+def test_check_ex_software_meson_introspect_fails(tmp_path: Path) -> None:
+    """check returns EX_SOFTWARE when meson introspect fails on a broken meson.build."""
+    _make_project(tmp_path, [Dependency('fmt', DependencySource.COLLIDER, None)])
+
+    # A syntactically broken meson.build makes introspect exit non-zero; the failure is the
+    # user's, so check must report it cleanly instead of routing to the "bug in collider" handler.
+    with patch(
+        'collider.subcommand.Check.scan_dependencies',
+        side_effect=subprocess.CalledProcessError(1, ['meson', 'introspect']),
+    ):
+        assert _run_check(tmp_path) == os.EX_SOFTWARE
 
 
 def test_check_ex_unavailable_meson_validation_fails(tmp_path: Path) -> None:
