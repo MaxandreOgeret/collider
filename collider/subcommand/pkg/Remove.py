@@ -127,6 +127,8 @@ class Remove(SubcommandInterface):
         warn_if_lockfile_needs_refresh(self.package_name)
 
         if self.prune:
+            # Deliberately ignore run_prune's exit code: the remove itself succeeded, and
+            # issue #46 requires remove --prune to exit EX_OK when pruning is skipped.
             run_prune(self.context)
         elif still_needed is not True:
             self._inform_about_remaining_wraps(

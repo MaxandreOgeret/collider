@@ -169,8 +169,11 @@ class Wrap(RepositoryInterface):
         if not isinstance(releases, dict):
             # Defensive: covers a non-object cached releases.json (e.g. a list or
             # `null`) that slipped past the network-fetch validation above.
-            logger.critical(f'Releases from "{effective_url.geturl()}" are not a JSON object.')
-            raise ColliderUserError('WrapDB returned malformed releases.json.', os.EX_DATAERR)
+            logger.critical(
+                f'Cached releases for "{effective_url.geturl()}" are not a JSON object'
+                f'{f"; delete {cache_file}" if cache_file is not None else ""}.'
+            )
+            raise ColliderUserError('Cached wrap releases are malformed.', os.EX_DATAERR)
         packages, rejected = _wrap_releases_to_packages(releases)
         if rejected:
             logger.warning(

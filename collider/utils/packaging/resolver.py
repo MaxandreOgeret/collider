@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import tarfile
@@ -24,6 +25,7 @@ from packaging.version import InvalidVersion
 from tqdm import tqdm
 
 from collider.cache import WrapCache
+from collider.errors import ColliderUserError
 from collider.log import logger, should_disable_progress
 from collider.repository import search_packages
 from collider.utils.core import assert_safe_path_segment
@@ -392,12 +394,15 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
             except (FileNotFoundError, ValueError) as e:
                 # FileNotFoundError means the archive is absent or could not be
                 # downloaded; ValueError covers hash mismatches and incomplete
-                # patch metadata. Both make this candidate unscannable. Other
-                # OSErrors (PermissionError, ENOSPC, ENOTEMPTY) signal real
-                # environment failures and must propagate rather than be masked
-                # as an empty dependency set.
+                # patch metadata. Both make this candidate unscannable.
                 logger.warning(f'Could not prepare source for scan: {e}')
                 return []
+            except OSError as e:
+                # PermissionError, ENOSPC, and friends are real environment failures:
+                # fail loudly as a user error rather than masking them as an empty
+                # dependency set, since strict callers catch only resolver exceptions.
+                logger.critical(msg := f'Could not prepare source for scan: {e}')
+                raise ColliderUserError(msg, os.EX_IOERR) from e
 
             source_archive = tmp / 'packagecache' / package.source_filename
             if not source_archive.exists():

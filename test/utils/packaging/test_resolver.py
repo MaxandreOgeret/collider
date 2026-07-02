@@ -3,6 +3,7 @@
 
 """Tests for the transitive dependency resolver."""
 
+import os
 import tarfile
 import zipfile
 
@@ -12,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import resolvelib
 
+from collider.errors import ColliderUserError
 from collider.repository.entries import (
     RejectedEntry,
     RejectReason,
@@ -1232,10 +1234,10 @@ def test_scan_candidate_online_fetches_from_repo_not_cache() -> None:
     mock_cache.load_wrap.assert_not_called()
 
 
-def test_scan_candidate_propagates_permission_error_from_prepare() -> None:
-    """A PermissionError while staging the source must propagate instead of being
-    swallowed as an empty dependency list, otherwise the resolver would treat the
-    candidate as satisfiable with zero dependencies."""
+def test_scan_candidate_reports_permission_error_as_user_error() -> None:
+    """A PermissionError while staging the source becomes a clean user error instead
+    of being swallowed as an empty dependency list: strict callers catch only resolver
+    exceptions, so a bare OSError would surface as an internal-bug banner."""
     from collider.cache import WrapCache
     from collider.Package import WrapPackage
 
@@ -1260,8 +1262,9 @@ def test_scan_candidate_propagates_permission_error_from_prepare() -> None:
     provider = ColliderProvider(repos, dep_index, offline=False, wrap_cache=mock_cache)
     candidate = Candidate('zlib', '1.3.1', 'local')
 
-    with pytest.raises(PermissionError):
+    with pytest.raises(ColliderUserError) as excinfo:
         provider._scan_candidate(candidate)
+    assert excinfo.value.exit_code == os.EX_IOERR
 
 
 def test_get_dependencies_scan_cache_is_keyed_by_repo() -> None:
