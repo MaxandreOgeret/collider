@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Optional, cast
 
 from collider import config
-from collider.errors import ColliderUserError
 from collider.file_model.configfile import ConfigFile, RepoEntry
 from collider.log import logger
 from collider.repository import RepoImplRegistry
@@ -225,11 +224,9 @@ class Repo(SubcommandInterface):
                 logger.critical(f'Failed to initialize config at "{config_path.as_posix()}": {exc}')
                 return None
 
-        try:
-            return ConfigFile.from_path(config_path)
-        except ColliderUserError:
-            # from_path already reported the problem; Repo degrades to a clean error return.
-            return None
+        # ConfigFile.from_path raises ColliderUserError on a corrupt config; let the
+        # carried exit code propagate to the entrypoint instead of degrading to EX_DATAERR.
+        return ConfigFile.from_path(config_path)
 
     @staticmethod
     def _normalize_repo_url(url: str) -> str:

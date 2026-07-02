@@ -259,8 +259,11 @@ def test_wrap_releases_cache_isolates_same_host_different_path(tmp_path):
 
 
 def test_wrap_from_url_offline_requires_cache(tmp_path):
-    with pytest.raises(ValueError, match='Offline mode requires cached wrap releases'):
+    with pytest.raises(
+        ColliderUserError, match='Offline mode requires cached wrap releases'
+    ) as excinfo:
         Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=tmp_path, offline=True)
+    assert excinfo.value.exit_code == os.EX_DATAERR
 
 
 def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
@@ -334,6 +337,18 @@ def test_wrap_from_url_null_body_raises_user_error(tmp_path, monkeypatch):
     assert excinfo.value.exit_code == os.EX_DATAERR
 
 
+def test_wrap_from_url_offline_non_object_cache_raises_user_error(tmp_path):
+    """Offline mode with a non-object cached releases.json is a clean data error."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text('[1, 2, 3]', encoding='utf-8')
+
+    with pytest.raises(ColliderUserError) as excinfo:
+        Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
+    assert excinfo.value.exit_code == os.EX_DATAERR
+
+
 def test_wrap_from_url_network_failure_with_corrupt_cache_raises(tmp_path, monkeypatch):
     """A failed refresh re-raises the network error when the cache is unusable."""
     cache_path = tmp_path / 'cache'
@@ -359,8 +374,11 @@ def test_wrap_from_url_offline_corrupt_cache_errors(tmp_path):
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text('{ not valid json', encoding='utf-8')
 
-    with pytest.raises(ValueError, match='Offline mode requires cached wrap releases'):
+    with pytest.raises(
+        ColliderUserError, match='Offline mode requires cached wrap releases'
+    ) as excinfo:
         Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
+    assert excinfo.value.exit_code == os.EX_DATAERR
 
 
 def test_wrap_from_url_fetches_when_ttl_expired(tmp_path, monkeypatch):

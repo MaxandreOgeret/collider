@@ -203,7 +203,7 @@ def test_prune_warns_without_lockfile(tmp_path: Path, caplog: pytest.LogCaptureF
 
 
 def test_prune_warns_on_corrupt_lockfile(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    """A corrupt lockfile triggers a warning and preserves all wraps."""
+    """A corrupt lockfile fails honestly with the carried exit code and preserves all wraps."""
     _init_project(tmp_path, dependencies=[])
     subprojects = tmp_path / 'subprojects'
     subprojects.mkdir()
@@ -218,7 +218,7 @@ def test_prune_warns_on_corrupt_lockfile(tmp_path: Path, caplog: pytest.LogCaptu
     cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        assert cmd.execute() == os.EX_OK
+        assert cmd.execute() == os.EX_DATAERR
     finally:
         os.chdir(cwd)
 

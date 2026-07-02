@@ -162,6 +162,19 @@ def test_managed_names_raises_on_malformed_lock(tmp_path: Path) -> None:
     assert excinfo.value.exit_code == os.EX_DATAERR
 
 
+def test_managed_names_tolerates_lock_vanishing_after_exists(tmp_path: Path, monkeypatch) -> None:
+    """A lock deleted between the exists() check and from_path() is treated as absent."""
+    Lockfile(
+        dependencies={'foo': LockedPackage(version='1.0', wrap_hash=_HASH, origin=_ORIGIN)},
+    ).save(tmp_path / Lockfile.get_filename())
+
+    def _raise_not_found(_path: Path) -> 'Lockfile':
+        raise FileNotFoundError(_path)
+
+    monkeypatch.setattr(Lockfile, 'from_path', _raise_not_found)
+    assert managed_package_names(tmp_path) is None
+
+
 def test_managed_names_tolerates_malformed_colliderfile(tmp_path: Path) -> None:
     """A valid lock with a corrupt colliderfile yields the lock-only managed set."""
     Lockfile(
@@ -238,6 +251,17 @@ def test_drift_raises_on_malformed_lock(tmp_path: Path) -> None:
     (tmp_path / Lockfile.get_filename()).write_text('{ not valid json', encoding='utf-8')
     with pytest.raises(ColliderUserError, match='is invalid'):
         detect_locked_wrap_drift(tmp_path)
+
+
+def test_drift_tolerates_lock_vanishing_after_exists(tmp_path: Path, monkeypatch) -> None:
+    """A lock deleted between the exists() check and from_path() yields no drift."""
+    _lock_with(tmp_path, foo='sha256:' + '0' * 64)
+
+    def _raise_not_found(_path: Path) -> 'Lockfile':
+        raise FileNotFoundError(_path)
+
+    monkeypatch.setattr(Lockfile, 'from_path', _raise_not_found)
+    assert detect_locked_wrap_drift(tmp_path) == []
 
 
 # -- remove_installed_artifacts (#45) -----------------------------------------

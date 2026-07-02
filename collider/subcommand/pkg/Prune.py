@@ -14,6 +14,7 @@ from typing import Optional
 import resolvelib
 
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.lockfile import Lockfile
 from collider.log import logger
 from collider.subcommand.SubcommandInterface import SubcommandInterface
@@ -106,6 +107,11 @@ def run_prune(context: Context, dry_run: bool = False) -> int:
 
     try:
         lockfile = Lockfile.from_path(lockfile_path)
+    except ColliderUserError as exc:
+        # An unreadable user lockfile is a user-data error: surface the carried
+        # exit code so direct prune invocations fail honestly instead of EX_OK.
+        logger.warning('prune skipped: unreadable lockfile; run "collider lock".')
+        return exc.exit_code
     except Exception:
         # Trailing one-liner so scripts can detect the skip without parsing mid-stream logs.
         logger.warning('prune skipped: unreadable lockfile; run "collider lock".')

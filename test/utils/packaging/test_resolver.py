@@ -1232,6 +1232,38 @@ def test_scan_candidate_online_fetches_from_repo_not_cache() -> None:
     mock_cache.load_wrap.assert_not_called()
 
 
+def test_scan_candidate_propagates_permission_error_from_prepare() -> None:
+    """A PermissionError while staging the source must propagate instead of being
+    swallowed as an empty dependency list, otherwise the resolver would treat the
+    candidate as satisfiable with zero dependencies."""
+    from collider.cache import WrapCache
+    from collider.Package import WrapPackage
+
+    package = WrapPackage.from_wrap_text(
+        'zlib',
+        '1.3.1',
+        '[wrap-file]\n'
+        'source_url=https://example.com/zlib-1.3.1.tar.xz\n'
+        'source_filename=zlib-1.3.1.tar.xz\n'
+        'source_hash=deadbeef\n',
+    )
+
+    packages = _make_packages(('zlib', '1.3.1', ['zlib']))
+    repo = _make_repo(packages, requires_network=False)
+    repo.get_package.return_value = package
+    repos = {'local': repo}
+    dep_index = build_dep_name_index(repos)
+
+    mock_cache = MagicMock(spec=WrapCache)
+    mock_cache.prepare_packagecache.side_effect = PermissionError('denied')
+
+    provider = ColliderProvider(repos, dep_index, offline=False, wrap_cache=mock_cache)
+    candidate = Candidate('zlib', '1.3.1', 'local')
+
+    with pytest.raises(PermissionError):
+        provider._scan_candidate(candidate)
+
+
 def test_get_dependencies_scan_cache_is_keyed_by_repo() -> None:
     """Two repos serving the same name+version are distinct packages, so their scans must not
     be shared: reusing one repo's scan for the other would bake the wrong dependency graph

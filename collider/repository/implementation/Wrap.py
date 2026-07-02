@@ -126,7 +126,9 @@ class Wrap(RepositoryInterface):
         releases: Optional[dict[str, WrapDbReleasesEntry]] = None
         if offline:
             if cache_file is None or (releases := _load_releases_cache(cache_file)) is None:
-                raise ValueError('Offline mode requires cached wrap releases.')
+                raise ColliderUserError(
+                    'Offline mode requires cached wrap releases.', os.EX_DATAERR
+                )
         elif (
             cache_file is not None
             and cache_file.exists()
@@ -153,12 +155,14 @@ class Wrap(RepositoryInterface):
                     )
                 if cache_file is not None:
                     atomic_write_text(cache_file, json.dumps(releases), encoding='utf-8')
-            except ColliderUserError:
+            except ColliderUserError:  # pylint: disable=try-except-raise
+                # Re-raise before the generic handler so a malformed-releases user
+                # error is not swallowed as a network failure and cache-fallback.
                 raise
-            except Exception as e:
+            except Exception:
                 cached = _load_releases_cache(cache_file) if cache_file is not None else None
                 if cached is None:
-                    raise e
+                    raise
                 logger.warning('Failed to refresh wrap releases; using cached data.')
                 releases = cached
 

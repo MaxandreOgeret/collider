@@ -187,7 +187,12 @@ def managed_package_names(sourcedir: Path) -> Optional[set[str]]:
         return None
 
     # A present but unreadable/malformed lock is a hard error; from_path reports it accurately.
-    lockfile = Lockfile.from_path(lock_path)
+    # Tolerate a TOCTOU delete between exists() and from_path(): a vanished lock is equivalent
+    # to "no lockfile" rather than a user-facing traceback.
+    try:
+        lockfile = Lockfile.from_path(lock_path)
+    except FileNotFoundError:
+        return None
 
     names = set(lockfile.all_packages)
 
@@ -223,7 +228,12 @@ def detect_locked_wrap_drift(sourcedir: Path) -> list[str]:
         return []
 
     # A present but unreadable/malformed lock is a hard error; from_path reports it accurately.
-    lockfile = Lockfile.from_path(lock_path)
+    # Tolerate a TOCTOU delete between exists() and from_path(): a vanished lock is equivalent
+    # to "no lockfile" rather than a user-facing traceback.
+    try:
+        lockfile = Lockfile.from_path(lock_path)
+    except FileNotFoundError:
+        return []
 
     subprojects_dir = sourcedir / SUBPROJECTS_DIR
     drifted: list[str] = []

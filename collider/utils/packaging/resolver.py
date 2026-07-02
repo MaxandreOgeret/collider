@@ -389,7 +389,13 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
                 cache = WrapCache(tmp / '.cache')
             try:
                 cache.prepare_packagecache(package, tmp, offline=self.offline)
-            except (OSError, ValueError) as e:
+            except (FileNotFoundError, ValueError) as e:
+                # FileNotFoundError means the archive is absent or could not be
+                # downloaded; ValueError covers hash mismatches and incomplete
+                # patch metadata. Both make this candidate unscannable. Other
+                # OSErrors (PermissionError, ENOSPC, ENOTEMPTY) signal real
+                # environment failures and must propagate rather than be masked
+                # as an empty dependency set.
                 logger.warning(f'Could not prepare source for scan: {e}')
                 return []
 
