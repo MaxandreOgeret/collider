@@ -86,10 +86,18 @@
   background-color: var(--md-default-bg-color);
 }
 
-/* Hide the switcher on narrow screens where the header is already tight. */
+/* Compact switcher on narrow screens where the header is tight; the page title next to it
+   ellipsizes, so the switcher stays usable on phones instead of disappearing. */
 @media screen and (max-width: 59.9844em) {
   .md-version-select {
-    display: none;
+    margin: 0 0.2rem;
+  }
+
+  .md-version-select__inner {
+    font-size: 0.65rem;
+    padding: 0 1.1rem 0 0.4rem;
+    background-position: right 0.3rem center;
+    background-size: 0.6rem;
   }
 }
 
