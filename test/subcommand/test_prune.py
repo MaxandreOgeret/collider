@@ -13,6 +13,7 @@ import pytest
 
 from collider.cache import WrapCache
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import LockedPackage, Lockfile
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
@@ -218,10 +219,12 @@ def test_prune_warns_on_corrupt_lockfile(tmp_path: Path, caplog: pytest.LogCaptu
     cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        assert cmd.execute() == os.EX_DATAERR
+        with pytest.raises(ColliderUserError) as excinfo:
+            cmd.execute()
     finally:
         os.chdir(cwd)
 
+    assert excinfo.value.exit_code == os.EX_DATAERR
     assert (subprojects / 'abseil-cpp.wrap').exists()
     assert caplog.records[-1].message == 'prune skipped: unreadable lockfile; run "collider lock".'
 

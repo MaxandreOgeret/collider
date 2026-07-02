@@ -16,12 +16,14 @@ import resolvelib
 
 from collider.cache import WrapCache
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import LockedPackage, Lockfile
 from collider.Package import WrapPackage
 from collider.repository.entries import RepoPackageEntry
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
 from collider.subcommand.pkg.Add import Add
+from collider.subcommand.pkg.Prune import PruneLockUnreadableError
 from collider.subcommand.pkg.Remove import Remove
 from collider.utils.packaging.Dependency import Dependency, DependencySource
 from collider.utils.packaging.PackageType import PackageType
@@ -173,6 +175,51 @@ def test_remove_with_prune_and_no_lockfile_ends_with_skip_summary(
         os.chdir(cwd)
 
     assert caplog.records[-1].message == 'prune skipped: no lockfile; run "collider lock".'
+
+
+def test_remove_with_prune_propagates_deletion_failure(tmp_path: Path) -> None:
+    """`remove --prune` tolerates only the lock skip: real prune failures propagate."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+
+    cmd = Remove(argparse.Namespace(package='shared', prune=True), _make_context(tmp_path))
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Remove.run_prune',
+            side_effect=ColliderUserError('undeletable orphan', os.EX_IOERR),
+        ):
+            with pytest.raises(ColliderUserError) as excinfo:
+                cmd.execute()
+    finally:
+        os.chdir(cwd)
+
+    assert excinfo.value.exit_code == os.EX_IOERR
+
+
+def test_remove_with_prune_tolerates_lock_skip(tmp_path: Path) -> None:
+    """`remove --prune` exits EX_OK when pruning is skipped over an unreadable lock."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+
+    cmd = Remove(argparse.Namespace(package='shared', prune=True), _make_context(tmp_path))
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Remove.run_prune',
+            side_effect=PruneLockUnreadableError('lock unreadable', os.EX_DATAERR),
+        ):
+            assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
 
 
 def test_remove_missing_package_returns_noinput(tmp_path: Path) -> None:
@@ -654,6 +701,8 @@ def test_remove_with_prune_warns_on_corrupt_lockfile(
     assert (subprojects / 'abseil-cpp.wrap').exists()
     # The trailing summary is the last line so scripts can detect the skip.
     assert caplog.records[-1].message == 'prune skipped: unreadable lockfile; run "collider lock".'
+    # A successful command must not leave CRITICAL lines in its output (issue #79).
+    assert not [r for r in caplog.records if r.levelname == 'CRITICAL']
 
 
 def test_remove_keeps_artifacts_when_dependency_index_is_unavailable(

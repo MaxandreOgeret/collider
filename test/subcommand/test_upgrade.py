@@ -5,6 +5,7 @@
 
 import argparse
 import hashlib
+import logging
 import os
 import urllib.request
 
@@ -544,6 +545,8 @@ def test_upgrade_ignores_corrupt_lockfile_warning_check(
     tmp_path: Path, monkeypatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Upgrade still succeeds when collider.lock exists but is unreadable."""
+    # The cause is logged at DEBUG; capture it regardless of the singleton logger level.
+    caplog.set_level(logging.DEBUG, logger='collider')
     _init_project(
         tmp_path,
         [Dependency('shared', DependencySource.COLLIDER, None)],
@@ -574,4 +577,7 @@ def test_upgrade_ignores_corrupt_lockfile_warning_check(
         os.chdir(cwd)
 
     assert (tmp_path / 'subprojects' / 'shared.wrap').exists()
+    # The unreadable lock is reported at debug only: a successful command must not
+    # leave CRITICAL lines in its output (issue #79).
     assert 'collider.lock" is invalid' in caplog.text
+    assert not [r for r in caplog.records if r.levelname == 'CRITICAL']

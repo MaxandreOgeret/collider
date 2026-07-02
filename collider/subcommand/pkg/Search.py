@@ -99,8 +99,7 @@ class Search(SubcommandInterface):
         try:
             self.name_pattern: re.Pattern = re.compile(args.pattern)
         except re.error as e:
-            logger.critical(msg := f'Invalid regex pattern: {e}')
-            raise ColliderUserError(msg, os.EX_USAGE) from e
+            raise ColliderUserError(f'Invalid regex pattern: {e}', os.EX_USAGE) from e
 
     @override
     def execute(self) -> int:

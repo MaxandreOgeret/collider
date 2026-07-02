@@ -101,9 +101,11 @@ Examples:
             if self.meson_setup_args[0] == '--':
                 self.meson_setup_args = self.meson_setup_args[1:]
             else:
-                logger.critical(msg := 'Expected "--" separator before meson arguments.')
-                logger.critical(f'E.g. "collider setup -- {" ".join(self.meson_setup_args)}"')
-                raise ColliderUserError(msg, os.EX_USAGE)
+                raise ColliderUserError(
+                    'Expected "--" separator before meson arguments.\n'
+                    f'E.g. "collider setup -- {" ".join(self.meson_setup_args)}"',
+                    os.EX_USAGE,
+                )
 
     @override
     def execute(self) -> int:
