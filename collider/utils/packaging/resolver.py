@@ -54,14 +54,6 @@ class Requirement:
         spec = SpecifierSet(version_spec_str) if version_spec_str else None
         object.__setattr__(self, 'version_spec', spec)
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Requirement):
-            return NotImplemented
-        return self.name == other.name
-
-    def __hash__(self) -> int:
-        return hash(self.name)
-
     def __repr__(self) -> str:
         if self.version_spec:
             return f'Requirement({self.name!r}, {str(self.version_spec)!r})'
@@ -75,18 +67,6 @@ class Candidate:
     name: str
     version: str
     repo_name: str
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Candidate):
-            return NotImplemented
-        return (
-            self.name == other.name
-            and self.version == other.version
-            and self.repo_name == other.repo_name
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.name, self.version, self.repo_name))
 
     def __repr__(self) -> str:
         return f'Candidate({self.name!r}, {self.version!r}, {self.repo_name!r})'
@@ -409,7 +389,7 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
                 cache = WrapCache(tmp / '.cache')
             try:
                 cache.prepare_packagecache(package, tmp, offline=self.offline)
-            except (FileNotFoundError, ValueError) as e:
+            except (OSError, ValueError) as e:
                 logger.warning(f'Could not prepare source for scan: {e}')
                 return []
 
@@ -456,7 +436,15 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
 
         try:
             with tarfile.open(archive_path) as tar:
-                tar.extractall(path=dest, filter='data')
+                if hasattr(tarfile, 'data_filter'):
+                    tar.extractall(path=dest, filter='data')
+                else:
+                    # Interpreters without the PEP 706 backport reject the filter kwarg.
+                    logger.warning(
+                        'Extracting archive without a tar filter; '
+                        'update Python for safer extraction.'
+                    )
+                    tar.extractall(path=dest)  # nosec B202
             return True
         except (tarfile.TarError, OSError) as e:
             logger.warning(f'Tar extraction failed for "{archive_path.name}": {e}')

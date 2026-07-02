@@ -282,6 +282,33 @@ def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
     assert make_repo_key('foo', '1.0.0', PackageType.WRAP) in repo.packages
 
 
+def test_wrap_from_url_corrupt_ttl_cache_refetches(tmp_path, monkeypatch):
+    """A corrupt within-TTL cache is treated as a miss and refreshed from the network."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text('{ not valid json', encoding='utf-8')
+
+    def _fake_urlopen(url, **_kwargs):
+        return _DummyResponse(json.dumps({'fresh': {'versions': ['3.0.0']}}))
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+    assert make_repo_key('fresh', '3.0.0', PackageType.WRAP) in repo.packages
+
+
+def test_wrap_from_url_offline_corrupt_cache_errors(tmp_path):
+    """Offline mode with a corrupt cache raises the clean offline error, not a parse crash."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text('{ not valid json', encoding='utf-8')
+
+    with pytest.raises(ValueError, match='Offline mode requires cached wrap releases'):
+        Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
+
+
 def test_wrap_from_url_fetches_when_ttl_expired(tmp_path, monkeypatch):
     """Stale cached releases.json (past TTL) triggers a fresh HTTP fetch."""
     cache_path = tmp_path / 'cache'

@@ -163,6 +163,14 @@ def test_requirement_hash_consistent_with_equality() -> None:
     assert len({r1, r2}) == 1
 
 
+def test_requirement_inequality_by_version_spec() -> None:
+    """Same-name requirements with different constraints stay distinct."""
+    r1 = Requirement('zlib', '>=1.2')
+    r2 = Requirement('zlib', '>=1.3')
+    assert r1 != r2
+    assert len({r1, r2}) == 2
+
+
 def test_requirement_repr_without_version() -> None:
     """Repr omits the version when none is set."""
     r = Requirement('zlib')
@@ -867,6 +875,24 @@ def test_extract_archive_corrupt_returns_false(tmp_path: Path) -> None:
     dest = tmp_path / 'out'
     dest.mkdir()
     assert ColliderProvider._extract_archive(archive, dest) is False
+
+
+def test_extract_archive_tar_without_data_filter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tar extraction works on interpreters without the PEP 706 filter backport."""
+    archive = tmp_path / 'test.tar.gz'
+    content_dir = tmp_path / 'src'
+    content_dir.mkdir()
+    (content_dir / 'meson.build').write_text("project('test', 'c')")
+    with tarfile.open(archive, 'w:gz') as tar:
+        tar.add(content_dir / 'meson.build', arcname='src/meson.build')
+
+    monkeypatch.delattr(tarfile, 'data_filter')
+    dest = tmp_path / 'out'
+    dest.mkdir()
+    assert ColliderProvider._extract_archive(archive, dest) is True
+    assert (dest / 'src' / 'meson.build').exists()
 
 
 # -- _patch_extract_target -----------------------------------------------------

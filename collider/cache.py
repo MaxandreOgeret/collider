@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import shutil
 import tempfile
@@ -237,7 +238,7 @@ class WrapCache:
                 f'Cached archive "{safe_name}" is corrupt: '
                 f'expected {expected_hash}, got {cached_hash}. Re-downloading.'
             )
-            cached_path.unlink()
+            cached_path.unlink(missing_ok=True)
 
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme == 'http':
@@ -290,7 +291,7 @@ class WrapCache:
         try:
             tmp_path.replace(cached_path)
         except OSError as exc:
-            if exc.errno != 18:
+            if exc.errno != errno.EXDEV:
                 raise
             # /tmp and cache may live on different filesystems, so fall back to a move.
             shutil.move(tmp_path, cached_path)
