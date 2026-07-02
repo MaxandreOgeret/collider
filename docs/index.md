@@ -17,11 +17,11 @@ hide:
   <a href="https://matrix.to/#/#collider:matrix.org"><img src="https://img.shields.io/badge/Join%20chat-%23collider%3Amatrix.org-000000?logo=matrix" alt="Matrix"></a>
 </p>
 
-<p align="center"><strong>A package and dependency manager for Meson projects, centered on Meson's wrap system.</strong></p>
+<p align="center"><strong>Collider brings modern package management to Meson's native wrap ecosystem.</strong></p>
 
-Collider streamlines how you publish, share, and consume Meson wrap packages.
-It works with WrapDB-compatible repositories so your existing Meson workflows stay
-intact while gaining proper dependency management.
+Rather than replacing Meson's dependency model, Collider extends it:
+automatic dependency resolution, lockfiles, and a streamlined day-to-day
+workflow, fully compatible with wraps and WrapDB.
 
 ## Key Features
 

@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "collider-wraps"
 version = "1.4.0"
-description = "A package and dependency manager for Meson projects."
+description = "Modern package management for Meson's wrap ecosystem."
 readme = "README.md"
 authors = [
     { name = "Maxandre Ogeret", email = "maxandre.ogeret@mogrobotics.com" }

@@ -3,7 +3,7 @@
 
 [project]
 site_name = "Collider"
-site_description = "A package and dependency manager for Meson projects."
+site_description = "Modern package management for Meson's wrap ecosystem."
 site_url = "https://collider.ee/"
 site_author = "Maxandre Ogeret"
 repo_url = "https://github.com/MaxandreOgeret/collider"

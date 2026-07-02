@@ -1,8 +1,8 @@
 # Glossary
 
 Collider
-:   A package and dependency manager for Meson projects, centered on Meson's
-    wrap system.
+:   A tool that brings modern package management to Meson's native wrap
+    ecosystem: dependency resolution, lockfiles, repositories, and publishing.
 
 Collider Home
 :   User-specific configuration directory. Defaults to

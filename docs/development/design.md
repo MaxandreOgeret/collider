@@ -2,7 +2,7 @@
 
 ## Scope and Goals
 
-- Provide a package manager for Meson projects, centered on Meson's wrap system.
+- Extend Meson's wrap system with modern package management: resolution, lockfiles, repositories, and publishing.
 - Keep the workflow minimal: publish, search, add, lock, and setup.
 - Support offline installs by caching wraps and archives locally.
 - Allow hosting of internal repositories with a single filesystem layout that is WrapDB-compatible.
