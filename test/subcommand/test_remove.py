@@ -154,6 +154,27 @@ def test_remove_succeeds_when_only_declared_dependency_exists(tmp_path: Path) ->
     assert colliderfile.dependencies == []
 
 
+def test_remove_with_prune_and_no_lockfile_ends_with_skip_summary(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """`remove --prune` without a lockfile ends with the script-detectable skip summary."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('shared', DependencySource.COLLIDER, None)],
+    )
+
+    cmd = Remove(argparse.Namespace(package='shared', prune=True), _make_context(tmp_path))
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert cmd.execute() == os.EX_OK
+    finally:
+        os.chdir(cwd)
+
+    assert caplog.records[-1].message == 'prune skipped: no lockfile; run "collider lock".'
+
+
 def test_remove_missing_package_returns_noinput(tmp_path: Path) -> None:
     """Removing an unknown package should fail cleanly."""
     _init_project(tmp_path, dependencies=[])
@@ -631,7 +652,8 @@ def test_remove_with_prune_warns_on_corrupt_lockfile(
 
     assert not (subprojects / 'grpc.wrap').exists()
     assert (subprojects / 'abseil-cpp.wrap').exists()
-    assert 'could not be read' in caplog.text
+    # The trailing summary is the last line so scripts can detect the skip.
+    assert caplog.records[-1].message == 'prune skipped: unreadable lockfile; run "collider lock".'
 
 
 def test_remove_keeps_artifacts_when_dependency_index_is_unavailable(

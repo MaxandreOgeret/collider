@@ -123,6 +123,9 @@ class Remove(SubcommandInterface):
         if removed_artifacts:
             logger.info(f'Removed installed wrap state for "{self.package_name}".')
 
+        # Warn before pruning so run_prune's trailing skip summary stays the last log line.
+        warn_if_lockfile_needs_refresh(self.package_name)
+
         if self.prune:
             run_prune(self.context)
         elif still_needed is not True:
@@ -132,7 +135,6 @@ class Remove(SubcommandInterface):
                 preserved_needed_name=self.package_name if still_needed is True else None,
             )
 
-        warn_if_lockfile_needs_refresh(self.package_name)
         return os.EX_OK
 
     def _resolve_remaining_needed_packages(self, colliderfile: Colliderfile) -> Optional[set[str]]:
