@@ -5,6 +5,7 @@
 
 import hashlib
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -12,6 +13,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from collider.errors import ColliderUserError
 from collider.log import logger
 from collider.Package import WrapPackage
 from collider.repository.entries import RejectedEntry, RepoPackageEntry, packages_from_releases
@@ -139,8 +141,20 @@ class Wrap(RepositoryInterface):
                     releases_url, timeout=DEFAULT_NETWORK_TIMEOUT
                 ) as response:
                     releases = json.load(response)
+                if not isinstance(releases, dict):
+                    # A 200 body that is not a JSON object (e.g. `null`, a list, or
+                    # an HTML error page parsed as a string) is a repository data
+                    # problem, not a Collider bug.
+                    logger.critical(
+                        f'WrapDB at "{effective_url.geturl()}" returned non-object releases.json.'
+                    )
+                    raise ColliderUserError(
+                        'WrapDB returned malformed releases.json.', os.EX_DATAERR
+                    )
                 if cache_file is not None:
                     atomic_write_text(cache_file, json.dumps(releases), encoding='utf-8')
+            except ColliderUserError:
+                raise
             except Exception as e:
                 cached = _load_releases_cache(cache_file) if cache_file is not None else None
                 if cached is None:
@@ -148,7 +162,11 @@ class Wrap(RepositoryInterface):
                 logger.warning('Failed to refresh wrap releases; using cached data.')
                 releases = cached
 
-        assert releases is not None
+        if not isinstance(releases, dict):
+            # Defensive: covers a non-object cached releases.json (e.g. a list or
+            # `null`) that slipped past the network-fetch validation above.
+            logger.critical(f'Releases from "{effective_url.geturl()}" are not a JSON object.')
+            raise ColliderUserError('WrapDB returned malformed releases.json.', os.EX_DATAERR)
         packages, rejected = _wrap_releases_to_packages(releases)
         if rejected:
             logger.warning(

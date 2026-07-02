@@ -45,12 +45,14 @@ def _init_project(tmp_path: Path, dependencies: list[Dependency] | None = None) 
     Colliderfile(dependencies=dependencies or []).save(tmp_path / Colliderfile.get_filename())
 
 
-def _make_context(tmp_path: Path, repo: RepositoryInterface) -> Context:
+def _make_context(
+    tmp_path: Path, repo: RepositoryInterface, cache: WrapCache | None = None
+) -> Context:
     """Build a Context whose single configured repository is the given mock."""
     config = MagicMock()
     config.repositories = {'repo1': repo}
     config.offline = False
-    return Context(config=config, cache=WrapCache(tmp_path / 'cache'), offline=False)
+    return Context(config=config, cache=cache or WrapCache(tmp_path / 'cache'), offline=False)
 
 
 def _run(cmd: Install, tmp_path: Path) -> int:
@@ -187,3 +189,62 @@ def test_install_ex_ok_no_collider_dependencies(tmp_path: Path) -> None:
     cmd = Install(argparse.Namespace(offline=False, frozen=False), context)
 
     assert _run(cmd, tmp_path) == os.EX_OK
+
+
+def _init_locked_pkg_project(tmp_path: Path, package: WrapPackage) -> None:
+    """Write a meson.build, collider.json, and a lockfile pinning the given package."""
+    _init_project(
+        tmp_path,
+        dependencies=[Dependency('pkg', DependencySource.COLLIDER, None)],
+    )
+    Lockfile(
+        dependencies={
+            'pkg': LockedPackage(
+                version='1.0.0',
+                wrap_hash=compute_wrap_hash(package.wrap_text),
+                origin=ORIGIN,
+            ),
+        },
+    ).save(tmp_path / Lockfile.get_filename())
+
+
+def _origin_repo(package: WrapPackage) -> RepositoryInterface:
+    """Build a mock origin repository that serves the given package."""
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.origin_url = ORIGIN
+    repo.requires_network.return_value = False
+    repo.get_package.return_value = package
+    return repo
+
+
+def test_install_ex_ioerr_cache_prepare_permission(tmp_path: Path) -> None:
+    """`collider install` returns EX_IOERR when preparing the package cache is denied."""
+    package = _make_package('pkg', '1.0.0', b'payload')
+    _init_locked_pkg_project(tmp_path, package)
+
+    cache = MagicMock(spec=WrapCache)
+    cache.prepare_packagecache.side_effect = PermissionError('denied')
+    context = _make_context(tmp_path, _origin_repo(package), cache=cache)
+
+    cmd = Install(argparse.Namespace(offline=False, frozen=False), context)
+
+    assert _run(cmd, tmp_path) == os.EX_IOERR
+
+
+def test_install_ex_ioerr_wrap_write_permission(tmp_path: Path, monkeypatch) -> None:
+    """`collider install` returns EX_IOERR when writing the wrap file fails."""
+    package = _make_package('pkg', '1.0.0', b'payload')
+    _init_locked_pkg_project(tmp_path, package)
+
+    # Cache is a no-op mock so prepare_packagecache cannot mask the wrap-write failure.
+    cache = MagicMock(spec=WrapCache)
+    context = _make_context(tmp_path, _origin_repo(package), cache=cache)
+
+    def _deny_wrap_write(self: WrapPackage, path: Path) -> None:
+        raise PermissionError('denied')
+
+    monkeypatch.setattr(WrapPackage, 'install_to_subproject', _deny_wrap_write)
+
+    cmd = Install(argparse.Namespace(offline=False, frozen=False), context)
+
+    assert _run(cmd, tmp_path) == os.EX_IOERR

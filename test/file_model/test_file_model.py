@@ -125,6 +125,20 @@ def test_mock_file_model_missing_file(tmp_path):
         MockFileModel.from_path(file_path)
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason='root ignores file permissions')
+def test_mock_file_model_unreadable_file(tmp_path):
+    """An unreadable file is a clean user error carrying EX_IOERR."""
+    file_path = tmp_path / 'unreadable.json'
+    file_path.write_text('{"name": "x", "version": 1}', encoding='UTF-8')
+    file_path.chmod(0o000)
+    try:
+        with pytest.raises(ColliderUserError) as excinfo:
+            MockFileModel.from_path(file_path)
+        assert excinfo.value.exit_code == os.EX_IOERR
+    finally:
+        file_path.chmod(0o644)
+
+
 def test_enum_serialization_as_dict_and_from_dict():
     """Test Enum serialization to values and deserialization back to instances."""
     o = Outer(name='x', inner=Inner(tone=Color.RED), palette=[Color.BLUE, Color.RED])
