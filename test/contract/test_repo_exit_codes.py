@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.configfile import ConfigFile
 from collider.subcommand.Repo import Repo
 
@@ -100,3 +101,18 @@ def test_repo_ex_noinput_remove_nonexistent() -> None:
     cmd = Repo(_repo_args(name='nonexistent', action='remove'), _make_context())
 
     assert cmd.execute() == os.EX_NOINPUT
+
+
+def test_repo_corrupt_config_propagates_user_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`repo list` re-raises ColliderUserError with the carried exit code on a corrupt config."""
+    config_path = tmp_path / 'config.json'
+    config_path.write_text('{ not valid json', encoding='utf-8')
+    monkeypatch.setattr('collider.config.get_config_path', lambda: config_path)
+
+    cmd = Repo(_repo_args(action='list'), _make_context())
+
+    with pytest.raises(ColliderUserError) as excinfo:
+        cmd.execute()
+    assert excinfo.value.exit_code == os.EX_DATAERR

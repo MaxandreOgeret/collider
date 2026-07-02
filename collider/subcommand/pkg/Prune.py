@@ -14,6 +14,7 @@ from typing import Optional
 import resolvelib
 
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.lockfile import Lockfile
 from collider.log import logger
 from collider.subcommand.SubcommandInterface import SubcommandInterface
@@ -96,17 +97,24 @@ def run_prune(context: Context, dry_run: bool = False) -> int:
     lockfile_path = Path.cwd() / Lockfile.get_filename()
     if not lockfile_path.exists():
         logger.warning(
-            'No lockfile found. Collider cannot safely determine which transitive wraps '
-            'are orphaned without existing ownership metadata.\n'
-            'Run "collider lock" to create ownership metadata for future operations; '
+            'Collider cannot safely determine which transitive wraps are orphaned '
+            'without existing ownership metadata; '
             'existing leftover wraps may still need to be removed manually.'
         )
+        # Trailing one-liner so scripts can detect the skip without parsing mid-stream logs.
+        logger.warning('prune skipped: no lockfile; run "collider lock".')
         return os.EX_OK
 
     try:
         lockfile = Lockfile.from_path(lockfile_path)
+    except ColliderUserError as exc:
+        # An unreadable user lockfile is a user-data error: surface the carried
+        # exit code so direct prune invocations fail honestly instead of EX_OK.
+        logger.warning('prune skipped: unreadable lockfile; run "collider lock".')
+        return exc.exit_code
     except Exception:
-        logger.warning('collider.lock could not be read. Run "collider lock" to regenerate it.')
+        # Trailing one-liner so scripts can detect the skip without parsing mid-stream logs.
+        logger.warning('prune skipped: unreadable lockfile; run "collider lock".')
         return os.EX_OK
 
     managed = set(lockfile.all_packages.keys())

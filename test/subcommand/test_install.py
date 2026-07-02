@@ -518,6 +518,41 @@ def test_install_fetch_package_rejects_unsafe_name(tmp_path: Path) -> None:
     assert install._fetch_package(entry, repo, repo_key) is None
 
 
+def _make_mock_cache_context(cache: WrapCache) -> Context:
+    """Build a context around a (possibly mocked) cache."""
+    config = MagicMock()
+    config.repositories = {}
+    config.offline = False
+    return Context(config=config, cache=cache, offline=False)
+
+
+def test_install_do_install_reports_cache_oserror(tmp_path: Path, monkeypatch) -> None:
+    """A permission error while preparing the package cache fails cleanly."""
+    from collider.subcommand.Install import Install
+
+    cache = MagicMock(spec=WrapCache)
+    cache.prepare_packagecache.side_effect = PermissionError('denied')
+    install = Install(argparse.Namespace(offline=False), _make_mock_cache_context(cache))
+
+    package = MagicMock(spec=WrapPackage)
+    monkeypatch.chdir(tmp_path)
+    assert install._do_install('shared', package) is False
+
+
+def test_install_do_install_reports_wrap_write_oserror(tmp_path: Path, monkeypatch) -> None:
+    """A permission error while writing the wrap file fails cleanly."""
+    from collider.subcommand.Install import Install
+
+    install = Install(
+        argparse.Namespace(offline=False), _make_mock_cache_context(MagicMock(spec=WrapCache))
+    )
+
+    package = MagicMock(spec=WrapPackage)
+    package.install_to_subproject.side_effect = PermissionError('denied')
+    monkeypatch.chdir(tmp_path)
+    assert install._do_install('shared', package) is False
+
+
 def test_install_adds_dependency_without_version(tmp_path: Path, monkeypatch) -> None:
     """New dependency in collider.json has no version pinned."""
     _init_project(tmp_path)

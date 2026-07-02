@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import urllib.parse
 
@@ -225,11 +224,9 @@ class Repo(SubcommandInterface):
                 logger.critical(f'Failed to initialize config at "{config_path.as_posix()}": {exc}')
                 return None
 
-        try:
-            return ConfigFile.from_path(config_path)
-        except (TypeError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            logger.critical(f'Invalid config file "{config_path.as_posix()}": {exc}')
-            return None
+        # ConfigFile.from_path raises ColliderUserError on a corrupt config; let the
+        # carried exit code propagate to the entrypoint instead of degrading to EX_DATAERR.
+        return ConfigFile.from_path(config_path)
 
     @staticmethod
     def _normalize_repo_url(url: str) -> str:

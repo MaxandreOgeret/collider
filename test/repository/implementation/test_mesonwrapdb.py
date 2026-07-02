@@ -5,11 +5,13 @@ import io
 import json
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 import pytest
 
+from collider.errors import ColliderUserError
 from collider.Package import WrapPackage
 from collider.repository.entries import RepoPackageEntry
 from collider.repository.implementation.Wrap import (
@@ -257,8 +259,11 @@ def test_wrap_releases_cache_isolates_same_host_different_path(tmp_path):
 
 
 def test_wrap_from_url_offline_requires_cache(tmp_path):
-    with pytest.raises(ValueError, match='Offline mode requires cached wrap releases'):
+    with pytest.raises(
+        ColliderUserError, match='Offline mode requires cached wrap releases'
+    ) as excinfo:
         Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=tmp_path, offline=True)
+    assert excinfo.value.exit_code == os.EX_DATAERR
 
 
 def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
@@ -280,6 +285,100 @@ def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
     assert not http_called
     assert make_repo_key('foo', '1.0.0', PackageType.WRAP) in repo.packages
+
+
+def test_wrap_from_url_corrupt_ttl_cache_refetches(tmp_path, monkeypatch):
+    """A corrupt within-TTL cache is treated as a miss and refreshed from the network."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text('{ not valid json', encoding='utf-8')
+
+    def _fake_urlopen(url, **_kwargs):
+        return _DummyResponse(json.dumps({'fresh': {'versions': ['3.0.0']}}))
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+
+    repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+    assert make_repo_key('fresh', '3.0.0', PackageType.WRAP) in repo.packages
+
+
+def test_wrap_from_url_network_failure_falls_back_to_stale_cache(tmp_path, monkeypatch, caplog):
+    """A failed refresh serves the stale cache with a warning."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps({'stale': {'versions': ['0.1.0']}}), encoding='utf-8')
+    stale_mtime = time.time() - _RELEASES_TTL_SECONDS - 10
+    os.utime(cache_file, (stale_mtime, stale_mtime))
+
+    def _fail_urlopen(url, **_kwargs):
+        raise urllib.error.URLError('network down')
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fail_urlopen)
+
+    with caplog.at_level('WARNING'):
+        repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+    assert make_repo_key('stale', '0.1.0', PackageType.WRAP) in repo.packages
+    assert 'using cached data' in caplog.text
+
+
+def test_wrap_from_url_null_body_raises_user_error(tmp_path, monkeypatch):
+    """A 200 response with a `null` body is a user-facing data error, not an internal crash."""
+    cache_path = tmp_path / 'cache'
+
+    def _null_urlopen(url, **_kwargs):
+        return _DummyResponse('null')
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _null_urlopen)
+
+    with pytest.raises(ColliderUserError) as excinfo:
+        Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+    assert excinfo.value.exit_code == os.EX_DATAERR
+
+
+def test_wrap_from_url_offline_non_object_cache_raises_user_error(tmp_path):
+    """Offline mode with a non-object cached releases.json is a clean data error."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text('[1, 2, 3]', encoding='utf-8')
+
+    with pytest.raises(ColliderUserError) as excinfo:
+        Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
+    assert excinfo.value.exit_code == os.EX_DATAERR
+
+
+def test_wrap_from_url_network_failure_with_corrupt_cache_raises(tmp_path, monkeypatch):
+    """A failed refresh re-raises the network error when the cache is unusable."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text('{ not valid json', encoding='utf-8')
+    stale_mtime = time.time() - _RELEASES_TTL_SECONDS - 10
+    os.utime(cache_file, (stale_mtime, stale_mtime))
+
+    def _fail_urlopen(url, **_kwargs):
+        raise urllib.error.URLError('network down')
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fail_urlopen)
+
+    with pytest.raises(urllib.error.URLError):
+        Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
+
+
+def test_wrap_from_url_offline_corrupt_cache_errors(tmp_path):
+    """Offline mode with a corrupt cache raises the clean offline error, not a parse crash."""
+    cache_path = tmp_path / 'cache'
+    cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text('{ not valid json', encoding='utf-8')
+
+    with pytest.raises(
+        ColliderUserError, match='Offline mode requires cached wrap releases'
+    ) as excinfo:
+        Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
+    assert excinfo.value.exit_code == os.EX_DATAERR
 
 
 def test_wrap_from_url_fetches_when_ttl_expired(tmp_path, monkeypatch):

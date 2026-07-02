@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 MOG Robotics OÜ
 
-import json
-
 from pathlib import Path
 
 import pytest
 
+from collider.errors import ColliderUserError
 from collider.file_model.lockfile import LockedPackage, Lockfile, compute_wrap_hash
 
 
@@ -146,10 +145,10 @@ def test_lockfile_validation_empty() -> None:
 
 
 def test_lockfile_validation_failure_invalid_json(tmp_path: Path) -> None:
-    """Test loading invalid JSON raises."""
+    """Test loading invalid JSON raises a clean user error."""
     path = tmp_path / 'collider.lock'
     path.write_text('not json')
-    with pytest.raises((json.JSONDecodeError, TypeError)):
+    with pytest.raises(ColliderUserError):
         Lockfile.from_path(path)
 
 

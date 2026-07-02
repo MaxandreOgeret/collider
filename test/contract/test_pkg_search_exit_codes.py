@@ -48,3 +48,8 @@ def test_pkg_search_ex_unavailable_cache_empty():
 def test_pkg_search_ex_noinput_unknown_repository():
     """`pkg search -r <name>` returns EX_NOINPUT when the repository is unknown."""
     assert run_subcommand(Subcommand.PKG, ['search', '-r', 'nonexistent', '.*']) == os.EX_NOINPUT
+
+
+def test_pkg_search_ex_usage_invalid_regex():
+    """`pkg search` returns EX_USAGE when the pattern is not a valid regex."""
+    assert run_subcommand(Subcommand.PKG, ['search', '[']) == os.EX_USAGE

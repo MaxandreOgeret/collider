@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import resolvelib
+
 from collider.cache import WrapCache
 from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
@@ -39,7 +41,9 @@ def test_status_reports_tracked_and_untracked(tmp_path: Path, caplog) -> None:
     (subprojects_dir / 'alpha.wrap').write_text('[wrap-file]\n', encoding='utf-8')
     (subprojects_dir / 'gamma.wrap').write_text('[wrap-file]\n', encoding='utf-8')
 
-    context = MagicMock(spec=Context)
+    config = MagicMock()
+    config.repositories = {}
+    context = Context(config=config, cache=WrapCache(tmp_path / 'cache'), offline=False)
     args = argparse.Namespace()
     cmd = Status(args, context)
 
@@ -221,7 +225,9 @@ def test_status_without_lockfile_shows_untracked(tmp_path: Path, caplog) -> None
     (subprojects_dir / 'grpc.wrap').write_text('[wrap-file]\n', encoding='utf-8')
     (subprojects_dir / 'abseil-cpp.wrap').write_text('[wrap-file]\n', encoding='utf-8')
 
-    context = MagicMock(spec=Context)
+    config = MagicMock()
+    config.repositories = {}
+    context = Context(config=config, cache=WrapCache(tmp_path / 'cache'), offline=False)
     cmd = Status(argparse.Namespace(), context)
 
     cwd = os.getcwd()
@@ -292,6 +298,43 @@ def test_status_without_lockfile_resolves_transitive(tmp_path: Path, caplog) -> 
     assert 'zlib (1.3.1) [installed]' in caplog.text
     assert '‣ untracked' in caplog.text
     assert '  ‣ manual' in caplog.text
+
+
+def test_status_warns_when_resolution_fails(tmp_path: Path, caplog) -> None:
+    """A failed resolution logs a warning instead of silently listing wraps as untracked."""
+    dependencies = [Dependency('grpc', DependencySource.COLLIDER, None)]
+    _init_project(tmp_path, dependencies)
+
+    subprojects_dir = tmp_path / 'subprojects'
+    subprojects_dir.mkdir()
+    (subprojects_dir / 'grpc.wrap').write_text('[wrap-file]\n', encoding='utf-8')
+    (subprojects_dir / 'abseil-cpp.wrap').write_text('[wrap-file]\n', encoding='utf-8')
+
+    config = MagicMock()
+    config.repositories = {'wrapdb': MagicMock()}
+    context = Context(config=config, cache=WrapCache(tmp_path / 'cache'), offline=False)
+    cmd = Status(argparse.Namespace(), context)
+
+    with (
+        patch(
+            'collider.subcommand.Status.resolve_all_dependencies',
+            side_effect=resolvelib.ResolutionTooDeep(1),
+        ),
+        patch(
+            'collider.subcommand.Status.build_dep_name_index',
+            return_value={'grpc': 'wrapdb'},
+        ),
+    ):
+        cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            assert cmd.execute() == os.EX_OK
+        finally:
+            os.chdir(cwd)
+
+    assert 'Version resolution failed' in caplog.text
+    assert '‣ untracked' in caplog.text
+    assert '  ‣ abseil-cpp' in caplog.text
 
 
 def test_status_passes_include_conditional_from_colliderfile(

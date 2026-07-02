@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.colliderfile import Colliderfile
 from collider.log import logger
 from collider.subcommand.SubcommandInterface import SubcommandInterface
@@ -102,7 +103,7 @@ Examples:
             else:
                 logger.critical(msg := 'Expected "--" separator before meson arguments.')
                 logger.critical(f'E.g. "collider setup -- {" ".join(self.meson_setup_args)}"')
-                raise ValueError(msg)
+                raise ColliderUserError(msg, os.EX_USAGE)
 
     @override
     def execute(self) -> int:
@@ -130,13 +131,10 @@ Examples:
             )
             return os.EX_NOINPUT
 
-        try:
-            if not self._verify_no_lock_drift():
-                return os.EX_DATAERR
-            fallback_args = self._force_fallback_args()
-        except ValueError as exc:
-            logger.critical(str(exc))
+        # A malformed or unreadable lock raises ColliderUserError, handled at the entrypoint.
+        if not self._verify_no_lock_drift():
             return os.EX_DATAERR
+        fallback_args = self._force_fallback_args()
 
         try:
             meson.setup(
@@ -163,7 +161,7 @@ Examples:
         default is to fail fast; --allow-drift downgrades this to a loud warning for the legitimate
         local-patch workflow.
         :return: True when setup may proceed, False when it must abort.
-        :raises ValueError: When collider.lock exists but is malformed.
+        :raises ColliderUserError: When collider.lock exists but cannot be read or parsed.
         """
         drifted = detect_locked_wrap_drift(self.sourcedir)
         if not drifted:
@@ -206,7 +204,7 @@ Examples:
         `--force-fallback-for`, so a user-supplied one is deferred to rather than overridden
         with a flag Meson would discard alongside a misleading message.
         :return: A single `--force-fallback-for` argument, or an empty list.
-        :raises ValueError: When collider.lock exists but is malformed.
+        :raises ColliderUserError: When collider.lock exists but cannot be read or parsed.
         """
         managed = managed_package_names(self.sourcedir)
 

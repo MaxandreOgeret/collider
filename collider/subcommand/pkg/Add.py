@@ -468,7 +468,7 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
                 offline=self.offline,
             )
             logger.debug('Package cache updated.')
-        except (FileNotFoundError, ValueError) as e:
+        except (OSError, ValueError) as e:
             logger.critical(str(e))
             return None
 
@@ -480,6 +480,9 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
             logger.critical(
                 f'{exc} Remove or rename the existing file/directory before installing this package.'
             )
+            return None
+        except OSError as exc:
+            logger.critical(f'Could not install wrap file: {exc}')
             return None
         return package
 

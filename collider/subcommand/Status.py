@@ -174,7 +174,13 @@ class Status(SubcommandInterface):
                 exclude_optional=any(dep.exclude_optional for dep in tracked),
             )
             return {name: candidate.version for name, candidate in resolution.mapping.items()}
-        except Exception:
+        except Exception as exc:
+            # Status stays best-effort on resolution failures, but says so instead of
+            # silently listing transitive wraps as untracked.
+            logger.warning(
+                f'Version resolution failed ({type(exc).__name__}: {exc}); '
+                'transitive wraps may be listed as untracked.'
+            )
             return {}
 
     @staticmethod

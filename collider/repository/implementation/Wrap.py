@@ -5,6 +5,7 @@
 
 import hashlib
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -12,6 +13,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from collider.errors import ColliderUserError
 from collider.log import logger
 from collider.Package import WrapPackage
 from collider.repository.entries import RejectedEntry, RepoPackageEntry, packages_from_releases
@@ -54,6 +56,20 @@ def _releases_cache_path(cache_path: Path, url: urllib.parse.ParseResult) -> Pat
     """
     digest = hashlib.sha256(url.geturl().encode('utf-8')).hexdigest()[:16]
     return Path(cache_path) / 'wrapdb' / f'{url.netloc}-{digest}' / _RELEASES_FILENAME
+
+
+def _load_releases_cache(cache_file: Path) -> Optional[dict[str, WrapDbReleasesEntry]]:
+    """
+    Load cached releases.json, or None when the file is missing or unreadable.
+    :param cache_file: Path to the cached releases.json.
+    :return: Parsed releases mapping, or None to signal a cache miss.
+    """
+    try:
+        return json.loads(cache_file.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        # ValueError covers both JSONDecodeError and UnicodeDecodeError.
+        logger.debug(f'Cached releases.json unusable: {exc}')
+        return None
 
 
 def _ensure_v2_url(url: urllib.parse.ParseResult) -> urllib.parse.ParseResult:
@@ -107,32 +123,57 @@ class Wrap(RepositoryInterface):
         if cache_path is not None:
             cache_file = _releases_cache_path(cache_path, effective_url)
 
-        releases: dict[str, WrapDbReleasesEntry]
+        releases: Optional[dict[str, WrapDbReleasesEntry]] = None
         if offline:
-            if cache_file is None or not cache_file.exists():
-                raise ValueError('Offline mode requires cached wrap releases.')
-            releases = json.loads(cache_file.read_text(encoding='utf-8'))
+            if cache_file is None or (releases := _load_releases_cache(cache_file)) is None:
+                raise ColliderUserError(
+                    'Offline mode requires cached wrap releases.', os.EX_DATAERR
+                )
         elif (
             cache_file is not None
             and cache_file.exists()
             and (time.time() - cache_file.stat().st_mtime) < _RELEASES_TTL_SECONDS
+            # A corrupt within-TTL cache falls through to a network refresh.
+            and (releases := _load_releases_cache(cache_file)) is not None
         ):
             logger.debug('Using cached releases.json (within TTL).')
-            releases = json.loads(cache_file.read_text(encoding='utf-8'))
-        else:
+        if releases is None and not offline:
             try:
                 with urllib.request.urlopen(
                     releases_url, timeout=DEFAULT_NETWORK_TIMEOUT
                 ) as response:
                     releases = json.load(response)
+                if not isinstance(releases, dict):
+                    # A 200 body that is not a JSON object (e.g. `null`, a list, or
+                    # an HTML error page parsed as a string) is a repository data
+                    # problem, not a Collider bug.
+                    logger.critical(
+                        f'WrapDB at "{effective_url.geturl()}" returned non-object releases.json.'
+                    )
+                    raise ColliderUserError(
+                        'WrapDB returned malformed releases.json.', os.EX_DATAERR
+                    )
                 if cache_file is not None:
                     atomic_write_text(cache_file, json.dumps(releases), encoding='utf-8')
-            except Exception as e:
-                if cache_file is None or not cache_file.exists():
-                    raise e
+            except ColliderUserError:  # pylint: disable=try-except-raise
+                # Re-raise before the generic handler so a malformed-releases user
+                # error is not swallowed as a network failure and cache-fallback.
+                raise
+            except Exception:
+                cached = _load_releases_cache(cache_file) if cache_file is not None else None
+                if cached is None:
+                    raise
                 logger.warning('Failed to refresh wrap releases; using cached data.')
-                releases = json.loads(cache_file.read_text(encoding='utf-8'))
+                releases = cached
 
+        if not isinstance(releases, dict):
+            # Defensive: covers a non-object cached releases.json (e.g. a list or
+            # `null`) that slipped past the network-fetch validation above.
+            logger.critical(
+                f'Cached releases for "{effective_url.geturl()}" are not a JSON object'
+                f'{f"; delete {cache_file}" if cache_file is not None else ""}.'
+            )
+            raise ColliderUserError('Cached wrap releases are malformed.', os.EX_DATAERR)
         packages, rejected = _wrap_releases_to_packages(releases)
         if rejected:
             logger.warning(

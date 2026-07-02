@@ -18,6 +18,7 @@ import collider.subcommand
 
 from collider import config
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.log import Level, configure_logging, logger
 from collider.utils import core
 from collider.utils.meson.meson import MesonUnavailableError
@@ -152,6 +153,10 @@ def main() -> int:
         # A missing or outdated Meson is a user environment problem, not a Collider bug,
         # so report a clean exit code instead of routing it through error_handler.
         return os.EX_UNAVAILABLE
+    except ColliderUserError as e:
+        # Usage and user-environment errors are logged at the raise site; exit cleanly
+        # with the carried code instead of routing them through error_handler.
+        return e.exit_code
 
 
 def entrypoint() -> None:

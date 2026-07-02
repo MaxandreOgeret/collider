@@ -2,6 +2,7 @@
 # Copyright 2026 MOG Robotics OÜ
 
 import json
+import os
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -11,6 +12,7 @@ from unittest.mock import PropertyMock, patch
 
 import pytest
 
+from collider.errors import ColliderUserError
 from collider.file_model.FileModelInterface import FileModelInterface
 
 
@@ -110,8 +112,9 @@ def test_mock_file_model_invalid_json(tmp_path):
     file_path = tmp_path / 'invalid.json'
     file_path.write_text('not json', encoding='UTF-8')
 
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(ColliderUserError) as excinfo:
         MockFileModel.from_path(file_path)
+    assert excinfo.value.exit_code == os.EX_DATAERR
 
 
 def test_mock_file_model_missing_file(tmp_path):
@@ -120,6 +123,20 @@ def test_mock_file_model_missing_file(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         MockFileModel.from_path(file_path)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason='root ignores file permissions')
+def test_mock_file_model_unreadable_file(tmp_path):
+    """An unreadable file is a clean user error carrying EX_IOERR."""
+    file_path = tmp_path / 'unreadable.json'
+    file_path.write_text('{"name": "x", "version": 1}', encoding='UTF-8')
+    file_path.chmod(0o000)
+    try:
+        with pytest.raises(ColliderUserError) as excinfo:
+            MockFileModel.from_path(file_path)
+        assert excinfo.value.exit_code == os.EX_IOERR
+    finally:
+        file_path.chmod(0o644)
 
 
 def test_enum_serialization_as_dict_and_from_dict():

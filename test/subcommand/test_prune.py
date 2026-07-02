@@ -196,14 +196,14 @@ def test_prune_warns_without_lockfile(tmp_path: Path, caplog: pytest.LogCaptureF
         os.chdir(cwd)
 
     assert (subprojects / 'abseil-cpp.wrap').exists()
-    assert 'No lockfile found' in caplog.text
     assert 'cannot safely determine which transitive wraps are orphaned' in caplog.text
-    assert 'Run "collider lock" to create ownership metadata for future operations' in caplog.text
     assert 'may still need to be removed manually' in caplog.text
+    # The trailing summary is the last line so scripts can detect the skip.
+    assert caplog.records[-1].message == 'prune skipped: no lockfile; run "collider lock".'
 
 
 def test_prune_warns_on_corrupt_lockfile(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    """A corrupt lockfile triggers a warning and preserves all wraps."""
+    """A corrupt lockfile fails honestly with the carried exit code and preserves all wraps."""
     _init_project(tmp_path, dependencies=[])
     subprojects = tmp_path / 'subprojects'
     subprojects.mkdir()
@@ -218,12 +218,12 @@ def test_prune_warns_on_corrupt_lockfile(tmp_path: Path, caplog: pytest.LogCaptu
     cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        assert cmd.execute() == os.EX_OK
+        assert cmd.execute() == os.EX_DATAERR
     finally:
         os.chdir(cwd)
 
     assert (subprojects / 'abseil-cpp.wrap').exists()
-    assert 'could not be read' in caplog.text
+    assert caplog.records[-1].message == 'prune skipped: unreadable lockfile; run "collider lock".'
 
 
 def test_prune_dry_run_lists_without_deleting(

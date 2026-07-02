@@ -3,6 +3,7 @@
 
 """Tests for the transitive dependency resolver."""
 
+import os
 import tarfile
 import zipfile
 
@@ -12,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import resolvelib
 
+from collider.errors import ColliderUserError
 from collider.repository.entries import (
     RejectedEntry,
     RejectReason,
@@ -161,6 +163,14 @@ def test_requirement_hash_consistent_with_equality() -> None:
     r2 = Requirement('zlib')
     assert hash(r1) == hash(r2)
     assert len({r1, r2}) == 1
+
+
+def test_requirement_inequality_by_version_spec() -> None:
+    """Same-name requirements with different constraints stay distinct."""
+    r1 = Requirement('zlib', '>=1.2')
+    r2 = Requirement('zlib', '>=1.3')
+    assert r1 != r2
+    assert len({r1, r2}) == 2
 
 
 def test_requirement_repr_without_version() -> None:
@@ -869,6 +879,24 @@ def test_extract_archive_corrupt_returns_false(tmp_path: Path) -> None:
     assert ColliderProvider._extract_archive(archive, dest) is False
 
 
+def test_extract_archive_tar_without_data_filter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tar extraction works on interpreters without the PEP 706 filter backport."""
+    archive = tmp_path / 'test.tar.gz'
+    content_dir = tmp_path / 'src'
+    content_dir.mkdir()
+    (content_dir / 'meson.build').write_text("project('test', 'c')")
+    with tarfile.open(archive, 'w:gz') as tar:
+        tar.add(content_dir / 'meson.build', arcname='src/meson.build')
+
+    monkeypatch.delattr(tarfile, 'data_filter')
+    dest = tmp_path / 'out'
+    dest.mkdir()
+    assert ColliderProvider._extract_archive(archive, dest) is True
+    assert (dest / 'src' / 'meson.build').exists()
+
+
 # -- _patch_extract_target -----------------------------------------------------
 
 
@@ -1204,6 +1232,39 @@ def test_scan_candidate_online_fetches_from_repo_not_cache() -> None:
 
     repo.get_package.assert_called_once()
     mock_cache.load_wrap.assert_not_called()
+
+
+def test_scan_candidate_reports_permission_error_as_user_error() -> None:
+    """A PermissionError while staging the source becomes a clean user error instead
+    of being swallowed as an empty dependency list: strict callers catch only resolver
+    exceptions, so a bare OSError would surface as an internal-bug banner."""
+    from collider.cache import WrapCache
+    from collider.Package import WrapPackage
+
+    package = WrapPackage.from_wrap_text(
+        'zlib',
+        '1.3.1',
+        '[wrap-file]\n'
+        'source_url=https://example.com/zlib-1.3.1.tar.xz\n'
+        'source_filename=zlib-1.3.1.tar.xz\n'
+        'source_hash=deadbeef\n',
+    )
+
+    packages = _make_packages(('zlib', '1.3.1', ['zlib']))
+    repo = _make_repo(packages, requires_network=False)
+    repo.get_package.return_value = package
+    repos = {'local': repo}
+    dep_index = build_dep_name_index(repos)
+
+    mock_cache = MagicMock(spec=WrapCache)
+    mock_cache.prepare_packagecache.side_effect = PermissionError('denied')
+
+    provider = ColliderProvider(repos, dep_index, offline=False, wrap_cache=mock_cache)
+    candidate = Candidate('zlib', '1.3.1', 'local')
+
+    with pytest.raises(ColliderUserError) as excinfo:
+        provider._scan_candidate(candidate)
+    assert excinfo.value.exit_code == os.EX_IOERR
 
 
 def test_get_dependencies_scan_cache_is_keyed_by_repo() -> None:

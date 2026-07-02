@@ -479,7 +479,7 @@ class Install(SubcommandInterface):
                 Path.cwd() / SUBPROJECTS_DIR,
                 offline=self.offline,
             )
-        except (FileNotFoundError, ValueError) as e:
+        except (OSError, ValueError) as e:
             logger.critical(str(e))
             return False
 
@@ -487,6 +487,9 @@ class Install(SubcommandInterface):
             package.install_to_subproject(subproject_path)
         except FileExistsError as exc:
             logger.critical(str(exc))
+            return False
+        except OSError as exc:
+            logger.critical(f'Could not install wrap file: {exc}')
             return False
 
         logger.info(f'Installed "{name}" version "{package.version}".')

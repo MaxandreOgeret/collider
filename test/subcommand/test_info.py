@@ -14,6 +14,7 @@ import pytest
 
 from collider.cache import WrapCache
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.colliderfile import Colliderfile
 from collider.Package import WrapPackage
 from collider.repository.entries import RepoPackageEntry
@@ -190,3 +191,66 @@ def test_info_returns_unavailable_when_package_is_missing(
         os.chdir(cwd)
 
     assert 'No package matching query.' in caplog.text
+
+
+def test_info_unreadable_wrap_due_to_encoding_yields_dataerr(tmp_path: Path) -> None:
+    """A wrap file with invalid UTF-8 is a data problem and exits with EX_DATAERR."""
+    _init_project(tmp_path, [Dependency('demo', DependencySource.COLLIDER, None)])
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+    (subprojects / 'demo.wrap').write_bytes(b'\xff\xfe\x00bad')
+
+    entry = RepoPackageEntry('demo', '2.0.0')
+    wrap_repo = Wrap(
+        urllib.parse.urlparse('https://wrapdb.example.com/v2/'),
+        {'demo@2.0.0#wrap': entry},
+    )
+    context = _make_context(tmp_path, {'wrapdb': wrap_repo})
+    cmd = Info(argparse.Namespace(package='demo', repository=None), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Info.search_packages',
+            return_value={'wrapdb': {'demo@2.0.0#wrap': entry}},
+        ):
+            with pytest.raises(ColliderUserError) as exc_info:
+                cmd.execute()
+    finally:
+        os.chdir(cwd)
+
+    assert exc_info.value.exit_code == os.EX_DATAERR
+
+
+def test_info_unreadable_wrap_due_to_oserror_yields_ioerr(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A wrap file that cannot be read is an IO problem and exits with EX_IOERR."""
+    _init_project(tmp_path, [Dependency('demo', DependencySource.COLLIDER, None)])
+    subprojects = tmp_path / 'subprojects'
+    subprojects.mkdir()
+    (subprojects / 'demo.wrap').write_text('[wrap-file]\n', encoding='utf-8')
+
+    entry = RepoPackageEntry('demo', '2.0.0')
+    wrap_repo = Wrap(
+        urllib.parse.urlparse('https://wrapdb.example.com/v2/'),
+        {'demo@2.0.0#wrap': entry},
+    )
+    context = _make_context(tmp_path, {'wrapdb': wrap_repo})
+    cmd = Info(argparse.Namespace(package='demo', repository=None), context)
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch(
+            'collider.subcommand.pkg.Info.search_packages',
+            return_value={'wrapdb': {'demo@2.0.0#wrap': entry}},
+        ):
+            with patch('pathlib.Path.read_text', side_effect=PermissionError('denied')):
+                with pytest.raises(ColliderUserError) as exc_info:
+                    cmd.execute()
+    finally:
+        os.chdir(cwd)
+
+    assert exc_info.value.exit_code == os.EX_IOERR

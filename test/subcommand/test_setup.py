@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.lockfile import LockedPackage, Lockfile, compute_wrap_hash
 from collider.subcommand.Setup import Setup
 from collider.utils import meson
@@ -168,14 +169,17 @@ def test_pass_args_to_meson(tmp_path: Path, meson_project: Path, capfd: pytest.C
 
 
 def test_missing_separator(tmp_path: Path, meson_project: Path, capfd: pytest.CaptureFixture):
-    """Test that missing -- separator for extra arguments causes failure."""
-    with pytest.raises(ValueError):
+    """Test that missing -- separator for extra arguments causes a clean usage error."""
+    assert (
         run_subcommand(
             Subcommand.SETUP,
             ['--sourcedir', str(meson_project), '--builddir', str(tmp_path), 'reconfigure'],
         )
+        == os.EX_USAGE
+    )
     stdout, stderr = capfd.readouterr()
     assert 'Expected "--" separator' in stderr
+    assert 'probably a bug' not in stderr
 
 
 def test_builddir_cleanup_on_failure(tmp_path: Path):
@@ -316,7 +320,7 @@ def test_setup_malformed_lock_errors(tmp_path: Path, capfd: pytest.CaptureFixtur
     )
 
     stdout, stderr = capfd.readouterr()
-    assert 'collider.lock is malformed' in stderr
+    assert 'collider.lock' in stderr and 'is invalid' in stderr
     assert not builddir.exists()
 
 
@@ -462,7 +466,7 @@ def test_force_args_malformed_lock_raises(tmp_path: Path) -> None:
     sourcedir = tmp_path / 'project'
     _write_wrapped_foo_project(sourcedir)
     (sourcedir / 'collider.lock').write_text('{ not json', encoding='utf-8')
-    with pytest.raises(ValueError, match='malformed'):
+    with pytest.raises(ColliderUserError, match='is invalid'):
         _force_fallback_args(sourcedir)
 
 
@@ -471,7 +475,7 @@ def test_force_args_malformed_lock_wins_over_user_override(tmp_path: Path) -> No
     sourcedir = tmp_path / 'project'
     _write_wrapped_foo_project(sourcedir)
     (sourcedir / 'collider.lock').write_text('garbage', encoding='utf-8')
-    with pytest.raises(ValueError, match='malformed'):
+    with pytest.raises(ColliderUserError, match='is invalid'):
         _force_fallback_args(sourcedir, ['--force-fallback-for=x'])
 
 
