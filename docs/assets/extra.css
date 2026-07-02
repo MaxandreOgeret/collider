@@ -43,36 +43,37 @@
   }
 }
 
-/* Version switcher injected into the header by assets/version-select.js. Styled like the search
-   field (.md-search__form) so it reads as an interactive input that belongs in the header, in both
-   the light and slate schemes (the header keeps the primary color, with white text, in both). */
+/* Version switcher injected into the header by assets/version-select.js. Matches the desktop
+   search bar (.md-search__button at min-width: 45em: 1.6rem tall, 0.2rem radius, #00000042
+   tint, #ffffff1f hover) so both header inputs read as one family, in both the light and slate
+   schemes (the header keeps the primary color, with white text, in both). */
 .md-version-select {
   display: flex;
   align-items: center;
   margin: 0 0.4rem;
-  height: 1.8rem;
+  height: 1.6rem;
 }
 
 .md-version-select__inner {
   appearance: none;
   -webkit-appearance: none;
-  height: 1.8rem;
+  height: 1.6rem;
   border: none;
-  border-radius: 0.1rem;
-  background-color: hsla(0, 0%, 0%, 0.07);
+  border-radius: 0.2rem;
+  background-color: #00000042;
   color: var(--md-primary-bg-color);
-  font: 700 0.7rem/1.8rem var(--md-text-font-family, inherit);
+  font: 700 0.7rem/1.6rem var(--md-text-font-family, inherit);
   padding: 0 1.4rem 0 0.6rem;
   cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.4rem center;
   background-size: 0.7rem;
-  transition: background-color 125ms;
+  transition: background-color 0.4s, color 0.4s;
 }
 
 .md-version-select__inner:hover {
-  background-color: hsla(0, 0%, 0%, 0.32);
+  background-color: #ffffff1f;
 }
 
 .md-version-select__inner:focus-visible {
