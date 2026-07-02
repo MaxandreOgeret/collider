@@ -78,6 +78,14 @@ class Prune(SubcommandInterface):
         return run_prune(self.context, dry_run=self.dry_run)
 
 
+class PruneLockUnreadableError(ColliderUserError):
+    """
+    Raised when pruning is skipped because collider.lock cannot be read or parsed.
+    Distinct from other user errors so ``remove --prune`` can tolerate exactly this
+    skip (issue #46) without swallowing real deletion failures.
+    """
+
+
 def run_prune(context: Context, dry_run: bool = False) -> int:
     """
     Remove orphaned Collider-managed wraps from the project.
@@ -88,6 +96,7 @@ def run_prune(context: Context, dry_run: bool = False) -> int:
     :param context: Application context (config, cache, offline).
     :param dry_run: When True, list orphans without deleting.
     :return: Process exit code.
+    :raises PruneLockUnreadableError: When collider.lock exists but cannot be read.
     """
     if not validate_meson_project_cwd():
         return os.EX_NOINPUT
@@ -108,10 +117,11 @@ def run_prune(context: Context, dry_run: bool = False) -> int:
     try:
         lockfile = Lockfile.from_path(lockfile_path)
     except ColliderUserError as exc:
-        # An unreadable user lockfile is a user-data error: surface the carried
-        # exit code so direct prune invocations fail honestly instead of EX_OK.
+        # An unreadable user lockfile is a user-data error: log the skip summary,
+        # then let the error propagate so direct prune invocations fail honestly
+        # with the cause reported at the entrypoint. remove --prune catches it.
         logger.warning('prune skipped: unreadable lockfile; run "collider lock".')
-        return exc.exit_code
+        raise PruneLockUnreadableError(str(exc), exc.exit_code) from exc
     except Exception:
         # Trailing one-liner so scripts can detect the skip without parsing mid-stream logs.
         logger.warning('prune skipped: unreadable lockfile; run "collider lock".')

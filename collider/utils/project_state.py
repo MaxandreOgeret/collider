@@ -158,8 +158,10 @@ def remove_installed_artifacts(package_name: str) -> bool:
             removed_any = True
     except OSError as exc:
         # A file the user made undeletable is an environment problem, not a Collider bug.
-        logger.critical(msg := f'Could not remove installed files for "{package_name}": {exc}')
-        raise ColliderUserError(msg, os.EX_IOERR) from exc
+        # The entrypoint reports the message; no log here.
+        raise ColliderUserError(
+            f'Could not remove installed files for "{package_name}": {exc}', os.EX_IOERR
+        ) from exc
 
     return removed_any
 
@@ -186,7 +188,7 @@ def managed_package_names(sourcedir: Path) -> Optional[set[str]]:
     if not lock_path.exists():
         return None
 
-    # A present but unreadable/malformed lock is a hard error; from_path reports it accurately.
+    # A present but unreadable/malformed lock is a hard error, reported at the entrypoint.
     # Tolerate a TOCTOU delete between exists() and from_path(): a vanished lock is equivalent
     # to "no lockfile" rather than a user-facing traceback.
     try:
@@ -227,7 +229,7 @@ def detect_locked_wrap_drift(sourcedir: Path) -> list[str]:
     if not lock_path.exists():
         return []
 
-    # A present but unreadable/malformed lock is a hard error; from_path reports it accurately.
+    # A present but unreadable/malformed lock is a hard error, reported at the entrypoint.
     # Tolerate a TOCTOU delete between exists() and from_path(): a vanished lock is equivalent
     # to "no lockfile" rather than a user-facing traceback.
     try:

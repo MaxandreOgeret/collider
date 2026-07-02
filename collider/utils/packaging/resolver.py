@@ -401,7 +401,8 @@ class ColliderProvider(resolvelib.AbstractProvider):  # pylint: disable=too-many
                 # PermissionError, ENOSPC, and friends are real environment failures:
                 # fail loudly as a user error rather than masking them as an empty
                 # dependency set, since strict callers catch only resolver exceptions.
-                logger.critical(msg := f'Could not prepare source for scan: {e}')
+                # Debug log keeps the cause discoverable when a caller swallows this.
+                logger.debug(msg := f'Could not prepare source for scan: {e}')
                 raise ColliderUserError(msg, os.EX_IOERR) from e
 
             source_archive = tmp / 'packagecache' / package.source_filename

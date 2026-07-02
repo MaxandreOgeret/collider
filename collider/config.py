@@ -69,6 +69,9 @@ def load(*, offline: bool = False) -> Context:
         try:
             config_file = ConfigFile.from_path(config_path)
         except ColliderUserError as exc:
+            # SystemExit bypasses the entrypoint's ColliderUserError reporting,
+            # so surface the message here before terminating.
+            logger.critical(str(exc))
             logger.critical('Fix or delete the config file to regenerate defaults.')
             raise SystemExit(exc.exit_code) from exc
         logger.debug(f'Loaded config file from "{config_path.as_posix()}".')

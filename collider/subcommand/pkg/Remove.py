@@ -17,7 +17,7 @@ from collider.Context import Context
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import Lockfile
 from collider.log import logger
-from collider.subcommand.pkg.Prune import run_prune
+from collider.subcommand.pkg.Prune import PruneLockUnreadableError, run_prune
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils.compat import override
 from collider.utils.meson import SUBPROJECTS_DIR
@@ -127,9 +127,14 @@ class Remove(SubcommandInterface):
         warn_if_lockfile_needs_refresh(self.package_name)
 
         if self.prune:
-            # Deliberately ignore run_prune's exit code: the remove itself succeeded, and
+            # Tolerate only the unreadable-lock skip: the remove itself succeeded, and
             # issue #46 requires remove --prune to exit EX_OK when pruning is skipped.
-            run_prune(self.context)
+            # The skip cause stays discoverable via --verbose (from_path debug log).
+            # Real deletion failures still propagate with their honest exit code.
+            try:
+                run_prune(self.context)
+            except PruneLockUnreadableError:
+                pass
         elif still_needed is not True:
             self._inform_about_remaining_wraps(
                 colliderfile,

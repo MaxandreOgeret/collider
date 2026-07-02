@@ -103,13 +103,15 @@ class FileModelInterface(ABC):
             # Malformed, schema-invalid, or undeserializable content (bad JSON, bad enum
             # value, unknown registry key) is a user data problem, not a bug.
             # json.JSONDecodeError and UnicodeDecodeError are ValueError subclasses.
-            logger.critical(msg := f'File "{filepath}" is invalid: {exc}')
+            # Log at debug only: callers that swallow this and continue must not leave
+            # a CRITICAL line; the entrypoint reports the message when it terminates.
+            logger.debug(msg := f'File "{filepath}" is invalid: {exc}')
             raise ColliderUserError(msg, os.EX_DATAERR) from exc
         except FileNotFoundError:
             logger.warning(f'File not found: "{filepath}".')
             raise
         except OSError as exc:
-            logger.critical(msg := f'Cannot read file "{filepath}": {exc}')
+            logger.debug(msg := f'Cannot read file "{filepath}": {exc}')
             raise ColliderUserError(msg, os.EX_IOERR) from exc
 
         return loaded_file

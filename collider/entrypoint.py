@@ -154,8 +154,10 @@ def main() -> int:
         # so report a clean exit code instead of routing it through error_handler.
         return os.EX_UNAVAILABLE
     except ColliderUserError as e:
-        # Usage and user-environment errors are logged at the raise site; exit cleanly
-        # with the carried code instead of routing them through error_handler.
+        # Report usage and user-environment errors here, at the terminating boundary,
+        # so raise sites stay silent and callers that swallow the error and continue
+        # do not leave a CRITICAL line in the output of a successful command.
+        logger.critical(str(e))
         return e.exit_code
 
 

@@ -173,11 +173,13 @@ class Info(SubcommandInterface):
         try:
             return wrap_path.read_text(encoding='utf-8')
         except UnicodeDecodeError as exc:
-            logger.critical(msg := f'Cannot read wrap file "{wrap_path}": {exc}')
-            raise ColliderUserError(msg, os.EX_DATAERR) from exc
+            raise ColliderUserError(
+                f'Cannot read wrap file "{wrap_path}": {exc}', os.EX_DATAERR
+            ) from exc
         except OSError as exc:
-            logger.critical(msg := f'Cannot read wrap file "{wrap_path}": {exc}')
-            raise ColliderUserError(msg, os.EX_IOERR) from exc
+            raise ColliderUserError(
+                f'Cannot read wrap file "{wrap_path}": {exc}', os.EX_IOERR
+            ) from exc
 
     def _resolve_installed(self, wrap_text: Optional[str]) -> str:
         if wrap_text is None:

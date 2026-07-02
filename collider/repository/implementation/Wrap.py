@@ -147,11 +147,9 @@ class Wrap(RepositoryInterface):
                     # A 200 body that is not a JSON object (e.g. `null`, a list, or
                     # an HTML error page parsed as a string) is a repository data
                     # problem, not a Collider bug.
-                    logger.critical(
-                        f'WrapDB at "{effective_url.geturl()}" returned non-object releases.json.'
-                    )
                     raise ColliderUserError(
-                        'WrapDB returned malformed releases.json.', os.EX_DATAERR
+                        f'WrapDB at "{effective_url.geturl()}" returned non-object releases.json.',
+                        os.EX_DATAERR,
                     )
                 if cache_file is not None:
                     atomic_write_text(cache_file, json.dumps(releases), encoding='utf-8')
@@ -169,11 +167,11 @@ class Wrap(RepositoryInterface):
         if not isinstance(releases, dict):
             # Defensive: covers a non-object cached releases.json (e.g. a list or
             # `null`) that slipped past the network-fetch validation above.
-            logger.critical(
+            raise ColliderUserError(
                 f'Cached releases for "{effective_url.geturl()}" are not a JSON object'
-                f'{f"; delete {cache_file}" if cache_file is not None else ""}.'
+                f'{f"; delete {cache_file}" if cache_file is not None else ""}.',
+                os.EX_DATAERR,
             )
-            raise ColliderUserError('Cached wrap releases are malformed.', os.EX_DATAERR)
         packages, rejected = _wrap_releases_to_packages(releases)
         if rejected:
             logger.warning(
