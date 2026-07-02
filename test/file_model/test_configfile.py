@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from collider.errors import ColliderUserError
 from collider.file_model.configfile import ConfigFile, RepoEntry
 from collider.repository import RepoImplRegistry
 
@@ -171,9 +172,7 @@ def test_config_file_validation_failure(tmp_path: Path):
     invalid_data = {'repositories': [{'name': 'test', 'url': '/tmp/repo'}]}
     config_path.write_text(json.dumps(invalid_data))
 
-    # from_path calls validate() which should fail for invalid data
-    # However, it seems prepare_ctor_kwargs raises TypeError if a required field is missing
-    # before validate() is even called on the instance.
-
-    with pytest.raises(TypeError):
+    # prepare_ctor_kwargs rejects the missing required field before validate() runs;
+    # from_path reports either shape as a clean user error.
+    with pytest.raises(ColliderUserError):
         ConfigFile.from_path(config_path)

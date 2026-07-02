@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import configparser
+import os
 import shutil
 
 from pathlib import Path
 from typing import Optional
 
+from collider.errors import ColliderUserError
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import Lockfile, compute_wrap_hash
 from collider.log import logger
@@ -128,6 +130,7 @@ def remove_installed_artifacts(package_name: str) -> bool:
     subprojects/.
     :param package_name: Collider-managed package to remove.
     :return: True when any artifact was removed.
+    :raises ColliderUserError: When an artifact exists but cannot be deleted.
     """
     if not is_safe_path_segment(package_name):
         logger.warning(f'Refusing to remove artifacts for unsafe package name "{package_name}".')
@@ -139,17 +142,24 @@ def remove_installed_artifacts(package_name: str) -> bool:
     # Resolve the extracted directory from the wrap before unlinking it.
     declared_dir = _declared_subproject_dir(wrap_path, package_name)
 
-    removed_any = False
-    if wrap_path.exists() or wrap_path.is_symlink():
-        wrap_path.unlink()
-        removed_any = True
+    try:
+        removed_any = False
+        # Remove trees before the wrap: the wrap holds the `directory=` field, so keeping
+        # it until last leaves a failed removal retryable.
+        dir_names = [package_name]
+        if declared_dir is not None and declared_dir != package_name:
+            dir_names.append(declared_dir)
+        for name in dir_names:
+            if _remove_subproject_tree(subprojects_dir, name):
+                removed_any = True
 
-    dir_names = [package_name]
-    if declared_dir is not None and declared_dir != package_name:
-        dir_names.append(declared_dir)
-    for name in dir_names:
-        if _remove_subproject_tree(subprojects_dir, name):
+        if wrap_path.exists() or wrap_path.is_symlink():
+            wrap_path.unlink()
             removed_any = True
+    except OSError as exc:
+        # A file the user made undeletable is an environment problem, not a Collider bug.
+        logger.critical(msg := f'Could not remove installed files for "{package_name}": {exc}')
+        raise ColliderUserError(msg, os.EX_IOERR) from exc
 
     return removed_any
 
@@ -170,16 +180,14 @@ def managed_package_names(sourcedir: Path) -> Optional[set[str]]:
     transitive wrap is recorded nowhere but the wrap file itself.
     :param sourcedir: Project source directory.
     :return: Managed package names, or None when collider.lock is absent.
-    :raises ValueError: When collider.lock exists but cannot be parsed.
+    :raises ColliderUserError: When collider.lock exists but cannot be read or parsed.
     """
     lock_path = sourcedir / Lockfile.get_filename()
     if not lock_path.exists():
         return None
 
-    try:
-        lockfile = Lockfile.from_path(lock_path)
-    except Exception as exc:
-        raise ValueError(f'collider.lock is malformed: {exc}') from exc
+    # A present but unreadable/malformed lock is a hard error; from_path reports it accurately.
+    lockfile = Lockfile.from_path(lock_path)
 
     names = set(lockfile.all_packages)
 
@@ -188,7 +196,7 @@ def managed_package_names(sourcedir: Path) -> Optional[set[str]]:
     if colliderfile_path.exists():
         try:
             colliderfile = Colliderfile.from_path(colliderfile_path)
-        except Exception as exc:
+        except ColliderUserError as exc:
             # The lockfile is authoritative; a broken colliderfile is caught later by setup
             # validation. Scope to lock-only names here rather than abort.
             logger.debug(f'Ignoring unreadable collider.json for force-fallback scoping: {exc}')
@@ -208,16 +216,14 @@ def detect_locked_wrap_drift(sourcedir: Path) -> list[str]:
     not changes to the extracted subproject source tree.
     :param sourcedir: Project source directory.
     :return: Sorted names of wraps that drifted from the lock; empty when none or no lock.
-    :raises ValueError: When collider.lock exists but cannot be parsed.
+    :raises ColliderUserError: When collider.lock exists but cannot be read or parsed.
     """
     lock_path = sourcedir / Lockfile.get_filename()
     if not lock_path.exists():
         return []
 
-    try:
-        lockfile = Lockfile.from_path(lock_path)
-    except Exception as exc:
-        raise ValueError(f'collider.lock is malformed: {exc}') from exc
+    # A present but unreadable/malformed lock is a hard error; from_path reports it accurately.
+    lockfile = Lockfile.from_path(lock_path)
 
     subprojects_dir = sourcedir / SUBPROJECTS_DIR
     drifted: list[str] = []

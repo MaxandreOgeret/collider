@@ -14,6 +14,7 @@ from packaging.specifiers import SpecifierSet
 
 from collider.cache import WrapCache
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.Package import WrapPackage
 from collider.repository.entries import RepoPackageEntry
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
@@ -81,10 +82,11 @@ def test_search_init(mock_context):
     assert search_cmd.version_pattern == SpecifierSet('>=1.0.0')
     assert search_cmd.name_pattern.pattern == 'my-pkg.*'
 
-    # Test invalid regex (should fail when user fixes the implementation bug)
+    # An invalid regex is a usage error, reported cleanly instead of as an internal bug.
     args_invalid = argparse.Namespace(pattern='[', repository=None, version=None, cache=False)
-    with pytest.raises(re.error):
+    with pytest.raises(ColliderUserError) as excinfo:
         Search(args_invalid, mock_context)
+    assert excinfo.value.exit_code == os.EX_USAGE
 
 
 def test_search_execute_all_repos(mock_context, caplog):

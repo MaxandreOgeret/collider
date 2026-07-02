@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import urllib.parse
 
@@ -14,6 +13,7 @@ from pathlib import Path
 from typing import Optional, cast
 
 from collider import config
+from collider.errors import ColliderUserError
 from collider.file_model.configfile import ConfigFile, RepoEntry
 from collider.log import logger
 from collider.repository import RepoImplRegistry
@@ -227,8 +227,8 @@ class Repo(SubcommandInterface):
 
         try:
             return ConfigFile.from_path(config_path)
-        except (TypeError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            logger.critical(f'Invalid config file "{config_path.as_posix()}": {exc}')
+        except ColliderUserError:
+            # from_path already reported the problem; Repo degrades to a clean error return.
             return None
 
     @staticmethod

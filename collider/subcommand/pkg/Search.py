@@ -17,6 +17,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion
 
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.log import logger
 from collider.repository.entries import RepoPackageEntry
 from collider.repository.repository import search_packages
@@ -98,8 +99,8 @@ class Search(SubcommandInterface):
         try:
             self.name_pattern: re.Pattern = re.compile(args.pattern)
         except re.error as e:
-            logger.critical(f'Invalid regex pattern: {e}')
-            raise e
+            logger.critical(msg := f'Invalid regex pattern: {e}')
+            raise ColliderUserError(msg, os.EX_USAGE) from e
 
     @override
     def execute(self) -> int:

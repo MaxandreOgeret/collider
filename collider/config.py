@@ -3,7 +3,6 @@
 
 """Application config paths and loading."""
 
-import json
 import os
 
 from dataclasses import dataclass
@@ -12,6 +11,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from collider.cache import WrapCache
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.configfile import ConfigFile
 from collider.log import logger
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
@@ -68,18 +68,9 @@ def load(*, offline: bool = False) -> Context:
     else:
         try:
             config_file = ConfigFile.from_path(config_path)
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            logger.critical(
-                f'Invalid JSON in "{config_path.as_posix()}". '
-                'Fix or delete the file to regenerate defaults.'
-            )
-            raise SystemExit(os.EX_DATAERR) from exc
-        except TypeError as exc:
-            logger.critical(
-                f'Invalid config file "{config_path.as_posix()}". '
-                'Fix or delete the file to regenerate defaults.'
-            )
-            raise SystemExit(os.EX_DATAERR) from exc
+        except ColliderUserError as exc:
+            logger.critical('Fix or delete the config file to regenerate defaults.')
+            raise SystemExit(exc.exit_code) from exc
         logger.debug(f'Loaded config file from "{config_path.as_posix()}".')
 
     # Shared cache keeps wrap and archive data reusable across projects.

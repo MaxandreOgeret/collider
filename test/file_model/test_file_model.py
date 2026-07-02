@@ -2,6 +2,7 @@
 # Copyright 2026 MOG Robotics OÜ
 
 import json
+import os
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -11,6 +12,7 @@ from unittest.mock import PropertyMock, patch
 
 import pytest
 
+from collider.errors import ColliderUserError
 from collider.file_model.FileModelInterface import FileModelInterface
 
 
@@ -110,8 +112,9 @@ def test_mock_file_model_invalid_json(tmp_path):
     file_path = tmp_path / 'invalid.json'
     file_path.write_text('not json', encoding='UTF-8')
 
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(ColliderUserError) as excinfo:
         MockFileModel.from_path(file_path)
+    assert excinfo.value.exit_code == os.EX_DATAERR
 
 
 def test_mock_file_model_missing_file(tmp_path):

@@ -4,6 +4,7 @@
 """Abstract file model interface."""
 
 import json
+import os
 import tempfile
 
 from abc import ABC
@@ -14,6 +15,7 @@ from typing import IO, Any, Dict, Optional, Type, TypeVar
 
 import jsonschema
 
+from collider.errors import ColliderUserError
 from collider.log import logger
 from collider.utils.dataclass import prepare_ctor_kwargs, to_json_dict
 from collider.utils.fs import atomic_write_text
@@ -97,12 +99,18 @@ class FileModelInterface(ABC):
         try:
             with open(filepath, 'r', encoding='UTF-8') as f:
                 loaded_file = cls.from_stream(f)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            logger.error(f'Invalid JSON in "{filepath}".')
-            raise
+        except (ValueError, TypeError, KeyError) as exc:
+            # Malformed, schema-invalid, or undeserializable content (bad JSON, bad enum
+            # value, unknown registry key) is a user data problem, not a bug.
+            # json.JSONDecodeError and UnicodeDecodeError are ValueError subclasses.
+            logger.critical(msg := f'File "{filepath}" is invalid: {exc}')
+            raise ColliderUserError(msg, os.EX_DATAERR) from exc
         except FileNotFoundError:
             logger.warning(f'File not found: "{filepath}".')
             raise
+        except OSError as exc:
+            logger.critical(msg := f'Cannot read file "{filepath}": {exc}')
+            raise ColliderUserError(msg, os.EX_IOERR) from exc
 
         return loaded_file
 

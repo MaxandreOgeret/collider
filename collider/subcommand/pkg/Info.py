@@ -18,6 +18,7 @@ import packaging.version
 from packaging.version import InvalidVersion
 
 from collider.Context import Context
+from collider.errors import ColliderUserError
 from collider.file_model.colliderfile import Colliderfile
 from collider.log import logger
 from collider.repository.entries import RepoPackageEntry
@@ -169,7 +170,11 @@ class Info(SubcommandInterface):
         wrap_path = Path.cwd() / 'subprojects' / f'{self.package_name}.wrap'
         if not wrap_path.exists():
             return None
-        return wrap_path.read_text(encoding='utf-8')
+        try:
+            return wrap_path.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.critical(msg := f'Cannot read wrap file "{wrap_path}": {exc}')
+            raise ColliderUserError(msg, os.EX_IOERR) from exc
 
     def _resolve_installed(self, wrap_text: Optional[str]) -> str:
         if wrap_text is None:

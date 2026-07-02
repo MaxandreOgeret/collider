@@ -3,10 +3,13 @@
 
 """Tests for project-state helpers."""
 
+import os
+
 from pathlib import Path
 
 import pytest
 
+from collider.errors import ColliderUserError
 from collider.file_model.colliderfile import Colliderfile
 from collider.file_model.lockfile import LockedPackage, Lockfile, compute_wrap_hash
 from collider.utils.packaging.Dependency import Dependency, DependencySource
@@ -154,8 +157,9 @@ def test_managed_names_unions_lock_and_colliderfile(tmp_path: Path) -> None:
 def test_managed_names_raises_on_malformed_lock(tmp_path: Path) -> None:
     """A malformed lockfile is a hard error, not a silent fallback."""
     (tmp_path / Lockfile.get_filename()).write_text('{ not valid json', encoding='utf-8')
-    with pytest.raises(ValueError):
+    with pytest.raises(ColliderUserError) as excinfo:
         managed_package_names(tmp_path)
+    assert excinfo.value.exit_code == os.EX_DATAERR
 
 
 def test_managed_names_tolerates_malformed_colliderfile(tmp_path: Path) -> None:
@@ -232,7 +236,7 @@ def test_drift_treats_non_utf8_wrap_as_drift(tmp_path: Path) -> None:
 def test_drift_raises_on_malformed_lock(tmp_path: Path) -> None:
     """A malformed lock is a hard error, mirroring managed_package_names."""
     (tmp_path / Lockfile.get_filename()).write_text('{ not valid json', encoding='utf-8')
-    with pytest.raises(ValueError, match='malformed'):
+    with pytest.raises(ColliderUserError, match='is invalid'):
         detect_locked_wrap_drift(tmp_path)
 
 
@@ -247,6 +251,21 @@ def _absent_directory_wrap() -> str:
         'source_filename = x.tar.gz\n'
         f'source_hash = {"0" * 64}\n'
     )
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason='root ignores directory permissions')
+def test_remove_artifacts_undeletable_wrap_raises_user_error(tmp_path: Path, monkeypatch) -> None:
+    """An undeletable artifact is a clean user error, not an internal bug."""
+    monkeypatch.chdir(tmp_path)
+    subprojects = tmp_path / 'subprojects'
+    _write_wrap(subprojects, 'fmt', _wrap_file_text('fmt-10.0.0'))
+    subprojects.chmod(0o555)
+    try:
+        with pytest.raises(ColliderUserError) as excinfo:
+            remove_installed_artifacts('fmt')
+        assert excinfo.value.exit_code == os.EX_IOERR
+    finally:
+        subprojects.chmod(0o755)
 
 
 def test_remove_artifacts_deletes_directory_field_tree(tmp_path: Path, monkeypatch) -> None:

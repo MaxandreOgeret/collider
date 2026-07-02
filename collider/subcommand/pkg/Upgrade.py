@@ -261,7 +261,12 @@ class Upgrade(SubcommandInterface):
     def _installed_wrap_matches(package_name: str, package: WrapPackage) -> bool:
         """Check whether the current wrap file already matches the fetched package."""
         wrap_path = Path.cwd() / SUBPROJECTS_DIR / f'{package_name}.wrap'
-        return wrap_path.exists() and wrap_path.read_text(encoding='utf-8') == package.wrap_text
+        try:
+            return wrap_path.exists() and wrap_path.read_text(encoding='utf-8') == package.wrap_text
+        except (OSError, UnicodeDecodeError) as exc:
+            # An unreadable wrap cannot match; the reinstall path surfaces any real problem.
+            logger.debug(f'Cannot read wrap "{wrap_path}": {exc}')
+            return False
 
     def _install_downloaded_package(self, entry: RepoPackageEntry, package: WrapPackage) -> bool:
         """Write a fetched package into subprojects/."""
@@ -272,7 +277,7 @@ class Upgrade(SubcommandInterface):
                 Path.cwd() / SUBPROJECTS_DIR,
                 offline=self.offline,
             )
-        except (FileNotFoundError, ValueError) as exc:
+        except (OSError, ValueError) as exc:
             logger.critical(str(exc))
             return False
 
@@ -280,6 +285,9 @@ class Upgrade(SubcommandInterface):
             package.install_to_subproject(subproject_path)
         except FileExistsError as exc:
             logger.critical(str(exc))
+            return False
+        except OSError as exc:
+            logger.critical(f'Could not install wrap file: {exc}')
             return False
 
         logger.info(f'Upgraded "{entry.name}" to version "{package.version}".')

@@ -291,4 +291,4 @@ def test_load_invalid_json_exits(mock_home: Path, caplog) -> None:
         config.load()
 
     assert excinfo.value.code == os.EX_DATAERR
-    assert f'Invalid JSON in "{config_path.as_posix()}"' in caplog.text
+    assert f'File "{config_path.as_posix()}" is invalid' in caplog.text

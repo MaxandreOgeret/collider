@@ -574,4 +574,4 @@ def test_upgrade_ignores_corrupt_lockfile_warning_check(
         os.chdir(cwd)
 
     assert (tmp_path / 'subprojects' / 'shared.wrap').exists()
-    assert 'Invalid JSON' in caplog.text
+    assert 'collider.lock" is invalid' in caplog.text
