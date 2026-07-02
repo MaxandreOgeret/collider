@@ -121,7 +121,7 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(
         prog=collider.__name__,
-        description='A package and dependency manager for Meson projects.',
+        description="Modern package management for Meson's wrap ecosystem.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         add_help=False,
     )
