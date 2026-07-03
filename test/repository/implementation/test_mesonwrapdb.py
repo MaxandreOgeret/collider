@@ -165,7 +165,7 @@ def test_wrap_url_builder_rejects_scheme_injection():
     """A colon in the name must not flip the wrap URL to a local or cross-protocol scheme."""
     url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
     entry = RepoPackageEntry('file:evil', '1.0', PackageType.WRAP)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='unsafe wrap URL'):
         _get_pkg_wrap_url(url, entry)
 
 

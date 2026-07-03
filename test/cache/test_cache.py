@@ -114,7 +114,7 @@ def test_wrap_cache_ensure_archive_rejects_non_http_scheme(tmp_path: Path, monke
 
     monkeypatch.setattr(urllib.request, 'urlopen', _fail_urlopen)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='Unsupported archive URL scheme'):
         cache.prepare_packagecache(package, tmp_path / 'subprojects', offline=False)
 
 

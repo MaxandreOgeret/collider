@@ -30,17 +30,24 @@ _RELEASES_TTL_SECONDS = 300
 
 
 def _get_pkg_wrap_url(url: urllib.parse.ParseResult, package: RepoPackageEntry) -> str:
+    """
+    Build the wrap download URL for a package from untrusted repository metadata.
+    :param url: Base repository URL whose scheme and host the result must keep.
+    :param package: Package entry whose name and version shape the request path.
+    :raises ValueError: When the name or version is an unsafe path segment, or would
+        divert the request to another scheme or host.
+    """
     # Name and version come from untrusted releases.json and shape the request path.
     name = assert_safe_path_segment(package.name)
     version = assert_safe_path_segment(package.version, 'version')
     path = f'{name}_{version}/{name}.wrap'
     wrap_url = urllib.parse.urljoin(url.geturl(), path)
-    # A colon in name/version makes urljoin read the path as a scheme (e.g. "file:"),
-    # flipping a network fetch to a local or cross-protocol request. Pin to the repo scheme.
-    if urllib.parse.urlparse(wrap_url).scheme != url.scheme:
-        raise ValueError(
-            f'Unsafe wrap URL scheme derived from package "{package.name}" version "{package.version}".'
-        )
+    # A colon in the package name makes urljoin read the path as a scheme (e.g. "file:"),
+    # and a leading slash lets it override the host; either would divert the fetch off the
+    # repository. Keep the guard self-contained by pinning both scheme and host.
+    parsed = urllib.parse.urlparse(wrap_url)
+    if parsed.scheme != url.scheme or parsed.netloc != url.netloc:
+        raise ValueError(f'Package "{package.name}" produced an unsafe wrap URL: {wrap_url}.')
     return wrap_url
 
 
