@@ -35,10 +35,6 @@ def run(
     :return: Captured output string, or None if capture is NONE.
     """
     logger.debug(f'Running command: {args}')
-    assert isinstance(args, list), f'Arg list "{args}" is not a list.'
-    for arg in args:
-        assert isinstance(arg, str), f'Argument "{arg}" is not a string.'
-
     resolved_cwd = Path.cwd() if cwd is None else cwd
 
     process = subprocess.run(
