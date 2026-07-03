@@ -344,10 +344,14 @@ class Add(SubcommandInterface):  # pylint: disable=too-many-instance-attributes
                     newest_repo = repos[repo_name]
                     newest_key = repo_key
 
-        assert newest_entry is not None
-        assert newest_repo_name is not None
-        assert newest_repo is not None
-        assert newest_key is not None
+        # Every match may have been skipped for an invalid version.
+        if (
+            newest_entry is None
+            or newest_repo_name is None
+            or newest_repo is None
+            or newest_key is None
+        ):
+            return None
 
         return newest_entry, newest_repo_name, newest_repo, newest_key
 

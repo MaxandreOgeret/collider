@@ -122,6 +122,28 @@ def test_pkg_add_ex_unavailable_no_matching_package(tmp_path: Path) -> None:
     assert not (tmp_path / Colliderfile.get_filename()).exists()
 
 
+def test_pkg_add_ex_unavailable_all_versions_invalid(tmp_path: Path) -> None:
+    """pkg add returns EX_UNAVAILABLE when every matching package has an unparsable version."""
+    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
+
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = False
+    context = _make_context(tmp_path, {'repo1': repo})
+    cmd = Add(_add_args('broken'), context)
+
+    broken_key = make_repo_key('broken', 'not-a-version', PackageType.WRAP)
+    broken_entry = RepoPackageEntry('broken', 'not-a-version', PackageType.WRAP)
+
+    os.chdir(tmp_path)
+    with patch(
+        'collider.subcommand.pkg.Add.search_packages',
+        return_value={'repo1': {broken_key: broken_entry}},
+    ):
+        assert cmd.execute() == os.EX_UNAVAILABLE
+    assert not (tmp_path / Colliderfile.get_filename()).exists()
+
+
 def test_pkg_add_lists_available_versions_when_pin_matches_nothing(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
