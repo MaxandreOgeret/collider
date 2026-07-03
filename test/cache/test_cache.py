@@ -96,6 +96,28 @@ def test_wrap_cache_ensure_archive_rejects_unsafe_hash(tmp_path: Path):
     assert not (tmp_path.parent / 'evil-foo.tar.xz').exists()
 
 
+def test_wrap_cache_ensure_archive_rejects_non_http_scheme(tmp_path: Path, monkeypatch):
+    """A non-http(s) source_url is rejected before any network fetch happens (SSRF guard)."""
+    cache = WrapCache(tmp_path / 'cache')
+    source_hash = hashlib.sha256(b'x').hexdigest()
+    package = WrapPackage.from_wrap_text(
+        'foo',
+        '1.0.0',
+        '[wrap-file]\n'
+        'source_url=ftp://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        f'source_hash={source_hash}\n',
+    )
+
+    def _fail_urlopen(*_args, **_kwargs):
+        raise AssertionError('urlopen must not be reached for a non-http(s) scheme.')
+
+    monkeypatch.setattr(urllib.request, 'urlopen', _fail_urlopen)
+
+    with pytest.raises(ValueError):
+        cache.prepare_packagecache(package, tmp_path / 'subprojects', offline=False)
+
+
 def test_wrap_cache_has_package(tmp_path: Path):
     cache = WrapCache(tmp_path / 'cache')
 

@@ -161,6 +161,24 @@ def test_wrap_url_builder_rejects_unsafe_version():
         _get_pkg_wrap_url(url, entry)
 
 
+def test_wrap_url_builder_rejects_scheme_injection():
+    """A colon in the name must not flip the wrap URL to a local or cross-protocol scheme."""
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    entry = RepoPackageEntry('file:evil', '1.0', PackageType.WRAP)
+    with pytest.raises(ValueError):
+        _get_pkg_wrap_url(url, entry)
+
+
+def test_wrap_url_builder_allows_colon_in_version():
+    """A colon in the version is a valid segment and must stay pinned to the repo scheme."""
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    entry = RepoPackageEntry('foo', 'ftp:1.0', PackageType.WRAP)
+
+    wrap_url = _get_pkg_wrap_url(url, entry)
+    assert wrap_url == 'https://wrapdb.mesonbuild.com/v2/foo_ftp:1.0/foo.wrap'
+    assert urllib.parse.urlparse(wrap_url).scheme == 'https'
+
+
 def test_wrap_url_builders():
     url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
     entry = RepoPackageEntry('foo', '1.2.3', PackageType.WRAP)

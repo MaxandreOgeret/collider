@@ -264,6 +264,10 @@ class WrapCache:
             shutil.copy2(local_path, cached_path)
             return cached_path
 
+        # Untrusted wrap metadata must never reach a non-http(s) network sink (SSRF).
+        if parsed.scheme not in ('http', 'https'):
+            raise ValueError(f'Unsupported archive URL scheme "{parsed.scheme}" for "{safe_name}".')
+
         if offline:
             # Offline mode must be explicit about missing archives.
             raise FileNotFoundError(f'Archive not found in cache: {safe_name}')

@@ -34,7 +34,14 @@ def _get_pkg_wrap_url(url: urllib.parse.ParseResult, package: RepoPackageEntry) 
     name = assert_safe_path_segment(package.name)
     version = assert_safe_path_segment(package.version, 'version')
     path = f'{name}_{version}/{name}.wrap'
-    return urllib.parse.urljoin(url.geturl(), path)
+    wrap_url = urllib.parse.urljoin(url.geturl(), path)
+    # A colon in name/version makes urljoin read the path as a scheme (e.g. "file:"),
+    # flipping a network fetch to a local or cross-protocol request. Pin to the repo scheme.
+    if urllib.parse.urlparse(wrap_url).scheme != url.scheme:
+        raise ValueError(
+            f'Unsafe wrap URL scheme derived from package "{package.name}" version "{package.version}".'
+        )
+    return wrap_url
 
 
 def _wrap_releases_to_packages(
