@@ -62,6 +62,31 @@ def _add_args(package: str, *, offline: bool = False, version: object = None) ->
     )
 
 
+def _make_add_cmd(
+    tmp_path: Path,
+    package: str,
+    *,
+    requires_network: bool = False,
+    offline: bool = False,
+    version: object = None,
+) -> Add:
+    """
+    Create a meson project in tmp_path and build an Add command against one mocked repository.
+    :param tmp_path: Temporary project directory.
+    :param package: Package name to add.
+    :param requires_network: Whether the mocked repository requires network access.
+    :param offline: Whether to run in offline mode.
+    :param version: Optional parsed version constraint (SpecifierSet).
+    :return: Add command ready to execute.
+    """
+    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
+    repo = MagicMock(spec=RepositoryInterface)
+    repo.packages = {}
+    repo.requires_network.return_value = requires_network
+    context = _make_context(tmp_path, {'repo1': repo})
+    return Add(_add_args(package, offline=offline, version=version), context)
+
+
 def test_pkg_add_ex_noinput_no_meson_build(tmp_path: Path) -> None:
     """pkg add returns EX_NOINPUT when no meson.build exists in the working directory."""
     os.chdir(tmp_path)
@@ -108,16 +133,26 @@ def test_pkg_add_ex_ok_existing_transitive_wrap_promoted(tmp_path: Path) -> None
 
 def test_pkg_add_ex_unavailable_no_matching_package(tmp_path: Path) -> None:
     """pkg add returns EX_UNAVAILABLE when no repository yields a matching package."""
-    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
-
-    repo = MagicMock(spec=RepositoryInterface)
-    repo.packages = {}
-    repo.requires_network.return_value = False
-    context = _make_context(tmp_path, {'repo1': repo})
-    cmd = Add(_add_args('ghost'), context)
+    cmd = _make_add_cmd(tmp_path, 'ghost')
 
     os.chdir(tmp_path)
     with patch('collider.subcommand.pkg.Add.search_packages', return_value={}):
+        assert cmd.execute() == os.EX_UNAVAILABLE
+    assert not (tmp_path / Colliderfile.get_filename()).exists()
+
+
+def test_pkg_add_ex_unavailable_all_versions_invalid(tmp_path: Path) -> None:
+    """pkg add returns EX_UNAVAILABLE when every matching package has an unparsable version."""
+    cmd = _make_add_cmd(tmp_path, 'broken')
+
+    broken_key = make_repo_key('broken', 'not-a-version', PackageType.WRAP)
+    broken_entry = RepoPackageEntry('broken', 'not-a-version', PackageType.WRAP)
+
+    os.chdir(tmp_path)
+    with patch(
+        'collider.subcommand.pkg.Add.search_packages',
+        return_value={'repo1': {broken_key: broken_entry}},
+    ):
         assert cmd.execute() == os.EX_UNAVAILABLE
     assert not (tmp_path / Colliderfile.get_filename()).exists()
 
@@ -126,13 +161,7 @@ def test_pkg_add_lists_available_versions_when_pin_matches_nothing(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A version pin that matches nothing surfaces the versions the repositories actually offer."""
-    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
-
-    repo = MagicMock(spec=RepositoryInterface)
-    repo.packages = {}
-    repo.requires_network.return_value = False
-    context = _make_context(tmp_path, {'repo1': repo})
-    cmd = Add(_add_args('zlib', version=SpecifierSet('==1.2.13')), context)
+    cmd = _make_add_cmd(tmp_path, 'zlib', version=SpecifierSet('==1.2.13'))
 
     zlib_key = make_repo_key('zlib', '1.2.13-1', PackageType.WRAP)
     zlib_entry = RepoPackageEntry('zlib', '1.2.13-1', PackageType.WRAP)
@@ -154,13 +183,7 @@ def test_pkg_add_lists_available_versions_when_pin_matches_nothing(
 
 def test_pkg_add_ex_ioerr_offline_missing_cache(tmp_path: Path) -> None:
     """pkg add returns EX_IOERR when an offline install finds the package uncached."""
-    (tmp_path / 'meson.build').write_text('project("dummy", "c")\n', encoding='utf-8')
-
-    repo = MagicMock(spec=RepositoryInterface)
-    repo.packages = {}
-    repo.requires_network.return_value = True
-    context = _make_context(tmp_path, {'repo1': repo})
-    cmd = Add(_add_args('demo', offline=True), context)
+    cmd = _make_add_cmd(tmp_path, 'demo', requires_network=True, offline=True)
 
     demo_key = make_repo_key('demo', '1.0.0', PackageType.WRAP)
     demo_entry = RepoPackageEntry('demo', '1.0.0', PackageType.WRAP)

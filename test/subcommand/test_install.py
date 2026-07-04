@@ -6,7 +6,6 @@
 import argparse
 import hashlib
 import os
-import urllib.request
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -85,7 +84,9 @@ def test_install_wrap_success(tmp_path: Path, monkeypatch) -> None:
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)
@@ -214,7 +215,9 @@ def test_install_preserves_declared_version(tmp_path: Path, monkeypatch) -> None
     entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)
@@ -251,7 +254,9 @@ def test_install_honors_declared_version_constraint(tmp_path: Path, monkeypatch)
     entry = RepoPackageEntry('shared', '1.5.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)
@@ -290,7 +295,9 @@ def test_install_with_version_flag_persists_constraint(tmp_path: Path, monkeypat
     entry = RepoPackageEntry('shared', '1.5.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', version=SpecifierSet('>=1.0,<2.0'), offline=False)
     cmd = Add(args, context)
@@ -350,7 +357,9 @@ def test_install_fails_on_existing_different_wrap(
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)
@@ -388,7 +397,9 @@ def test_install_does_not_create_lockfile(tmp_path: Path, monkeypatch) -> None:
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)
@@ -435,7 +446,9 @@ def test_install_does_not_update_existing_lockfile(
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)
@@ -488,7 +501,9 @@ def test_install_does_not_warn_when_lockfile_already_matches(
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)
@@ -571,7 +586,9 @@ def test_install_adds_dependency_without_version(tmp_path: Path, monkeypatch) ->
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(package='shared', offline=False)
     cmd = Add(args, context)

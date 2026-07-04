@@ -39,6 +39,17 @@ def mock_home(tmp_path: Path):
     os.chdir(original_cwd)
 
 
+@pytest.fixture(autouse=True)
+def stub_dns(monkeypatch):
+    """
+    Resolve every host to a public address so unit tests never perform real DNS.
+    Tests that exercise blocked-address handling override this stub locally.
+    """
+    monkeypatch.setattr(
+        'collider.utils.network._resolve_host_addresses', lambda _host: ['93.184.216.34']
+    )
+
+
 @pytest.fixture(scope='function')
 def temp_empty_meson_project(pytestconfig: pytest.Config):
     empty_project = pytestconfig.rootpath / 'test' / 'assets' / 'pkg' / 'none'

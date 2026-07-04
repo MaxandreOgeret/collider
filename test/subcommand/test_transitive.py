@@ -6,7 +6,6 @@
 import argparse
 import hashlib
 import os
-import urllib.request
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -128,7 +127,7 @@ def test_transitive_add_resolves_transitive_deps(tmp_path: Path, monkeypatch) ->
             return _DummyResponse(abseil_content)
         return _DummyResponse(b'')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', fake_urlopen)
 
     args = argparse.Namespace(
         package='grpc',
@@ -186,8 +185,7 @@ def test_add_creates_colliderfile_when_missing(tmp_path: Path, monkeypatch) -> N
     context = _make_context(tmp_path, {'repo1': repo})
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -272,7 +270,7 @@ def test_transitive_rejects_unsafe_package_name(tmp_path: Path, monkeypatch) -> 
     context = _make_context(tmp_path, {'repo1': repo})
 
     monkeypatch.setattr(
-        urllib.request, 'urlopen', lambda url, **kwargs: _DummyResponse(grpc_content)
+        'collider.utils.network.safe_urlopen', lambda url, **kwargs: _DummyResponse(grpc_content)
     )
 
     resolved_mapping = {
@@ -345,8 +343,7 @@ def test_transitive_add_skips_system_deps(
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(zlib_content),
     )
 
@@ -411,8 +408,7 @@ def test_transitive_add_with_exclude_flag(tmp_path: Path, monkeypatch) -> None:
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -479,8 +475,7 @@ def test_transitive_add_persists_include_exclude_in_colliderfile(
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(zlib_content),
     )
 
@@ -549,8 +544,7 @@ def test_transitive_add_fails_on_transitive_install_failure(tmp_path: Path, monk
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -612,8 +606,7 @@ def test_transitive_add_forwards_version_spec(tmp_path: Path, monkeypatch) -> No
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(zlib_content),
     )
 
@@ -681,8 +674,7 @@ def test_transitive_add_rolls_back_on_transitive_failure(tmp_path: Path, monkeyp
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -925,8 +917,7 @@ def test_add_force_reinstalls(tmp_path: Path, monkeypatch) -> None:
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -992,8 +983,7 @@ def test_add_not_installed_proceeds_normally(tmp_path: Path, monkeypatch) -> Non
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(zlib_content),
     )
 
@@ -1064,8 +1054,7 @@ def test_add_force_removes_subproject_directory(tmp_path: Path, monkeypatch) -> 
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -1131,8 +1120,7 @@ def test_add_force_when_not_installed(tmp_path: Path, monkeypatch) -> None:
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(zlib_content),
     )
 
@@ -1205,8 +1193,7 @@ def test_add_force_updates_colliderfile(tmp_path: Path, monkeypatch) -> None:
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -1274,8 +1261,7 @@ def test_add_persists_include_conditional_flag(tmp_path: Path, monkeypatch) -> N
     resolved_mapping = {'grpc': Candidate('grpc', '1.59.1', 'repo1')}
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -1341,8 +1327,7 @@ def test_add_persists_exclude_optional_flag(tmp_path: Path, monkeypatch) -> None
     resolved_mapping = {'grpc': Candidate('grpc', '1.59.1', 'repo1')}
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(grpc_content),
     )
 
@@ -1500,7 +1485,9 @@ def test_add_skips_invalid_versions_when_selecting_newest(tmp_path: Path, monkey
 
     bad_key = make_repo_key('demo', 'not-a-version', PackageType.WRAP)
     good_key = make_repo_key('demo', '2.0.0', PackageType.WRAP)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **kwargs: _DummyResponse(content)
+    )
 
     cwd = os.getcwd()
     try:
@@ -1624,7 +1611,9 @@ def test_add_fails_when_subproject_directory_exists(tmp_path: Path, monkeypatch)
 
     demo_key = make_repo_key('demo', '1.0.0', PackageType.WRAP)
     demo_entry = RepoPackageEntry('demo', '1.0.0', PackageType.WRAP)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **kwargs: _DummyResponse(content)
+    )
 
     cwd = os.getcwd()
     try:
@@ -1668,8 +1657,7 @@ def test_add_partial_transitive_failure_leaves_installed_transitives_in_place(
     }
 
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **kwargs: _DummyResponse(
             root_content if 'grpc' in url else ok_content if 'abseil' in url else b''
         ),

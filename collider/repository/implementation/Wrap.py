@@ -8,7 +8,6 @@ import json
 import os
 import time
 import urllib.parse
-import urllib.request
 
 from pathlib import Path
 from typing import Optional
@@ -18,6 +17,7 @@ from collider.log import logger
 from collider.Package import WrapPackage
 from collider.repository.entries import RejectedEntry, RepoPackageEntry, packages_from_releases
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
+from collider.utils import network
 from collider.utils.core import assert_safe_path_segment
 from collider.utils.fs import atomic_write_text
 from collider.utils.meson.infoTypes import WrapDbReleasesEntry
@@ -30,11 +30,25 @@ _RELEASES_TTL_SECONDS = 300
 
 
 def _get_pkg_wrap_url(url: urllib.parse.ParseResult, package: RepoPackageEntry) -> str:
+    """
+    Build the wrap download URL for a package from untrusted repository metadata.
+    :param url: Base repository URL whose scheme and host the result must keep.
+    :param package: Package entry whose name and version shape the request path.
+    :raises ValueError: When the name or version is an unsafe path segment, or would
+        divert the request to another scheme or host.
+    """
     # Name and version come from untrusted releases.json and shape the request path.
     name = assert_safe_path_segment(package.name)
     version = assert_safe_path_segment(package.version, 'version')
     path = f'{name}_{version}/{name}.wrap'
-    return urllib.parse.urljoin(url.geturl(), path)
+    wrap_url = urllib.parse.urljoin(url.geturl(), path)
+    # A colon in the package name makes urljoin read the path as a scheme (e.g. "file:"),
+    # and a leading slash lets it override the host; either would divert the fetch off the
+    # repository. Keep the guard self-contained by pinning both scheme and host.
+    parsed = urllib.parse.urlparse(wrap_url)
+    if parsed.scheme != url.scheme or parsed.netloc != url.netloc:
+        raise ValueError(f'Package "{package.name}" produced an unsafe wrap URL: {wrap_url}.')
+    return wrap_url
 
 
 def _wrap_releases_to_packages(
@@ -139,7 +153,9 @@ class Wrap(RepositoryInterface):
             logger.debug('Using cached releases.json (within TTL).')
         if releases is None and not offline:
             try:
-                with urllib.request.urlopen(
+                # The repo host is user-configured (may be LAN or loopback), but redirects
+                # must stay on http(s), hence the governed opener.
+                with network.safe_urlopen(
                     releases_url, timeout=DEFAULT_NETWORK_TIMEOUT
                 ) as response:
                     releases = json.load(response)
@@ -202,7 +218,7 @@ class Wrap(RepositoryInterface):
         entry = self.packages[repo_key]
 
         wrap_url = _get_pkg_wrap_url(self.url, entry)
-        with urllib.request.urlopen(wrap_url, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
+        with network.safe_urlopen(wrap_url, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
             wrap_bytes = response.read()
 
         try:

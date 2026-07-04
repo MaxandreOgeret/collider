@@ -6,7 +6,6 @@
 import argparse
 import hashlib
 import os
-import urllib.request
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -302,7 +301,7 @@ def test_remove_workflow_promoted_transitive_stays_quiet_when_still_needed(
             return _DummyResponse(re2_content)
         return _DummyResponse(b'')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _urlopen)
 
     grpc_mapping = {
         'grpc': Candidate('grpc', '1.59.1', 'repo1'),

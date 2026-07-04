@@ -3,8 +3,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from collider.Context import Context
 from collider.repository.implementation.Filesystem import Filesystem
 from collider.repository.implementation.RepositoryInterface import RepositoryInterface
@@ -84,8 +82,6 @@ def test_resolve_repositories_missing_returns_none(caplog) -> None:
 
 def test_resolve_filesystem_repository_found(tmp_path) -> None:
     """Test resolve_filesystem_repository returns repo and EX_OK when found and Filesystem."""
-    from pathlib import Path
-
     repo = Filesystem(tmp_path / 'repo', publish_url='file:///tmp/repo')
     (tmp_path / 'repo').mkdir(parents=True, exist_ok=True)
     config = MagicMock()

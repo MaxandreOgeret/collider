@@ -66,8 +66,6 @@ class FileModelInterface(ABC):
 
     def _set_path(self, path: Path) -> None:
         """Reject directory paths to avoid clobbering folders."""
-        assert isinstance(path, Path)
-
         if path.is_dir():
             logger.error(msg := f'File save path must not be a directory: {path}')
             raise TypeError(msg)
@@ -80,8 +78,6 @@ class FileModelInterface(ABC):
         data = json.load(stream)
 
         loaded_file = cls(path=Path(stream.name), **prepare_ctor_kwargs(data, cls))
-        assert isinstance(loaded_file, cls)
-        assert loaded_file.get_path() is not None
 
         if not loaded_file.validate():
             raise TypeError('Failed to validate file before loading.')
