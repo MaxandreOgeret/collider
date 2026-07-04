@@ -8,7 +8,6 @@ import hashlib
 import logging
 import os
 import urllib.error
-import urllib.request
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -95,7 +94,9 @@ def test_lock_creates_lockfile(tmp_path: Path, monkeypatch) -> None:
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -180,7 +181,9 @@ def test_lock_rewrites_existing_lockfile(tmp_path: Path, monkeypatch) -> None:
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -219,7 +222,9 @@ def test_lock_honors_declared_version_constraint(tmp_path: Path, monkeypatch) ->
     entry = RepoPackageEntry('shared', '1.5.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -367,7 +372,9 @@ def test_lock_cross_root_conflict_detected(
     config.offline = False
     context = Context(config=config, cache=WrapCache(tmp_path / 'cache'), offline=False)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     def mock_get_deps(self_prov, candidate):
         if candidate.name == 'libfoo':
@@ -422,7 +429,9 @@ def test_lock_verifies_source_archive(tmp_path: Path, monkeypatch) -> None:
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -467,7 +476,7 @@ def test_lock_verifies_cached_archive(tmp_path: Path, monkeypatch) -> None:
             raise AssertionError('Should not download pre-cached archive')
         return _DummyResponse(content)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', urlopen_should_not_download)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', urlopen_should_not_download)
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -507,7 +516,9 @@ def test_lock_fails_on_source_archive_hash_mismatch(tmp_path: Path, monkeypatch,
     all_matches = {'repo1': {repo_key: entry}}
 
     tampered = b'tampered content'
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(tampered))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(tampered)
+    )
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -570,7 +581,7 @@ def test_lock_fails_on_patch_archive_hash_mismatch(tmp_path: Path, monkeypatch, 
             return _DummyResponse(tampered_patch)
         return _DummyResponse(source_content)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', mock_urlopen)
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -661,7 +672,7 @@ def test_lock_fails_on_corrupt_cached_archive(tmp_path: Path, monkeypatch, caplo
 
     # Re-download after corrupt cache eviction also returns bad data.
     monkeypatch.setattr(
-        urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(b'still wrong')
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(b'still wrong')
     )
 
     args = argparse.Namespace(offline=False)
@@ -710,7 +721,9 @@ def test_lock_corrupt_cache_redownloads_and_succeeds(tmp_path: Path, monkeypatch
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -761,7 +774,7 @@ def test_lock_corrupt_cache_network_unavailable_fails(tmp_path: Path, monkeypatc
     def mock_urlopen(url, **_kwargs):
         raise urllib.error.URLError('simulated network failure')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', mock_urlopen)
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -806,7 +819,7 @@ def test_lock_archive_unreachable_not_cached_fails(tmp_path: Path, monkeypatch, 
     def mock_urlopen(url, **_kwargs):
         raise urllib.error.URLError('simulated unreachable')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', mock_urlopen)
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)
@@ -886,7 +899,7 @@ def test_lock_atomicity_second_package_fails(tmp_path: Path, monkeypatch, caplog
             return _DummyResponse(content_a)
         return _DummyResponse(b'tampered')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', mock_urlopen)
 
     config = MagicMock()
     config.repositories = {'repo1': repo}
@@ -962,7 +975,7 @@ def test_lock_origin_per_package_matches_source_repo(tmp_path: Path, monkeypatch
             return _DummyResponse(content_a)
         return _DummyResponse(content_b)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', mock_urlopen)
 
     config = MagicMock()
     config.repositories = {'repo_a': repo_a, 'repo_b': repo_b}
@@ -1000,7 +1013,9 @@ def test_lock_package_migration_changes_origin(tmp_path: Path, monkeypatch) -> N
     content_hash = hashlib.sha256(content).hexdigest()
     package = WrapPackage.from_wrap_text('shared', '1.0.0', _wrap_text(content_hash))
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     repo_key = make_repo_key('shared', '1.0.0', PackageType.WRAP)
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
@@ -1102,7 +1117,9 @@ def test_lock_two_repos_same_package_origin_reflects_winner(tmp_path: Path, monk
         'repo_b': {key_low: entry_low},
     }
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     config = MagicMock()
     config.repositories = {'repo_a': repo_a, 'repo_b': repo_b}
@@ -1151,7 +1168,9 @@ def test_lock_wrap_hash_integrity_preserved_with_origin(tmp_path: Path, monkeypa
     entry = RepoPackageEntry('shared', '1.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False)
     cmd = Lock(args, context)

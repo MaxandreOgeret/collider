@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import logging
 import os
-import urllib.request
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -95,7 +94,9 @@ def test_upgrade_one_package_replaces_existing_wrap(
     repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
     entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     lockfile = Lockfile(
         dependencies={
@@ -173,8 +174,7 @@ def test_upgrade_all_packages_uses_declared_constraints(tmp_path: Path, monkeypa
 
     payloads = iter([alpha_content, beta_content])
     monkeypatch.setattr(
-        urllib.request,
-        'urlopen',
+        'collider.utils.network.safe_urlopen',
         lambda url, **_kwargs: _DummyResponse(next(payloads)),
     )
 
@@ -211,7 +211,9 @@ def test_upgrade_with_version_updates_constraint(tmp_path: Path, monkeypatch) ->
     repo_key = make_repo_key('shared', '1.5.0', PackageType.WRAP)
     entry = RepoPackageEntry('shared', '1.5.0', PackageType.WRAP)
     all_matches = {'repo1': {repo_key: entry}}
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     cmd = Upgrade(
         argparse.Namespace(package='shared', version=SpecifierSet('<2.0.0'), offline=False),
@@ -302,7 +304,9 @@ def test_upgrade_does_not_warn_when_lockfile_already_matches(
         }
     )
     lockfile.save(tmp_path / Lockfile.get_filename())
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
 
@@ -337,7 +341,9 @@ def test_upgrade_offline_uses_cached_wrap(tmp_path: Path, monkeypatch) -> None:
 
     repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
     entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=True), context)
 
@@ -396,7 +402,9 @@ def test_upgrade_skips_invalid_versions(tmp_path: Path, monkeypatch) -> None:
 
     bad_key = make_repo_key('shared', 'bad-version', PackageType.WRAP)
     good_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
     cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
 
     cwd = os.getcwd()
@@ -477,7 +485,9 @@ def test_upgrade_fails_when_installing_downloaded_package_fails(
 
     repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
     entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
     cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
 
     cwd = os.getcwd()
@@ -562,7 +572,9 @@ def test_upgrade_ignores_corrupt_lockfile_warning_check(
 
     repo_key = make_repo_key('shared', '2.0.0', PackageType.WRAP)
     entry = RepoPackageEntry('shared', '2.0.0', PackageType.WRAP)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
     cmd = Upgrade(argparse.Namespace(package='shared', version=None, offline=False), context)
 
     cwd = os.getcwd()

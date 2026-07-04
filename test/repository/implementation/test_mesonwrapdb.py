@@ -7,7 +7,6 @@ import os
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 
 import pytest
 
@@ -55,7 +54,7 @@ def test_wrap_from_url_fetches_releases(monkeypatch):
         called['url'] = url
         return _DummyResponse(payload)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/')
     assert isinstance(repo, Wrap)
@@ -78,7 +77,7 @@ def test_wrap_from_url_warns_missing_v2(monkeypatch, caplog):
         called['url'] = url
         return _DummyResponse(payload)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     caplog.set_level('WARNING')
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com')
@@ -95,7 +94,7 @@ def test_wrap_from_url_warns_http(monkeypatch, caplog):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(payload)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     caplog.set_level('WARNING')
     repo = Wrap.from_url('http://wrapdb.mesonbuild.com/v2/')
@@ -226,7 +225,7 @@ def test_wrap_get_package_parses_wrap(monkeypatch):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(wrap_text)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
     repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
@@ -298,7 +297,7 @@ def test_wrap_from_url_uses_ttl_cache_when_fresh(tmp_path, monkeypatch):
         http_called = True
         return _DummyResponse(json.dumps({'bar': {'versions': ['2.0.0']}}))
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
     assert not http_called
@@ -315,7 +314,7 @@ def test_wrap_from_url_corrupt_ttl_cache_refetches(tmp_path, monkeypatch):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(json.dumps({'fresh': {'versions': ['3.0.0']}}))
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
     assert make_repo_key('fresh', '3.0.0', PackageType.WRAP) in repo.packages
@@ -333,7 +332,7 @@ def test_wrap_from_url_network_failure_falls_back_to_stale_cache(tmp_path, monke
     def _fail_urlopen(url, **_kwargs):
         raise urllib.error.URLError('network down')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fail_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fail_urlopen)
 
     with caplog.at_level('WARNING'):
         repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
@@ -348,7 +347,7 @@ def test_wrap_from_url_null_body_raises_user_error(tmp_path, monkeypatch):
     def _null_urlopen(url, **_kwargs):
         return _DummyResponse('null')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _null_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _null_urlopen)
 
     with pytest.raises(ColliderUserError) as excinfo:
         Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
@@ -379,7 +378,7 @@ def test_wrap_from_url_network_failure_with_corrupt_cache_raises(tmp_path, monke
     def _fail_urlopen(url, **_kwargs):
         raise urllib.error.URLError('network down')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fail_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fail_urlopen)
 
     with pytest.raises(urllib.error.URLError):
         Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
@@ -412,7 +411,7 @@ def test_wrap_from_url_fetches_when_ttl_expired(tmp_path, monkeypatch):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(json.dumps({'fresh': {'versions': ['3.0.0']}}))
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
     assert make_repo_key('fresh', '3.0.0', PackageType.WRAP) in repo.packages
@@ -426,7 +425,7 @@ def test_wrap_from_url_fetches_when_no_cache(tmp_path, monkeypatch):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(json.dumps({'new': {'versions': ['1.0.0']}}))
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path)
     assert make_repo_key('new', '1.0.0', PackageType.WRAP) in repo.packages
@@ -449,7 +448,7 @@ def test_wrap_from_url_ttl_not_checked_in_offline_mode(tmp_path, monkeypatch):
         http_called = True
         return _DummyResponse(json.dumps({}))
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     repo = Wrap.from_url('https://wrapdb.mesonbuild.com/v2/', cache_path=cache_path, offline=True)
     assert not http_called

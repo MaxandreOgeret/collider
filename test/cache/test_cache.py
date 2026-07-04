@@ -4,7 +4,7 @@
 import hashlib
 import io
 import shutil
-import urllib.request
+import tempfile
 
 from pathlib import Path
 
@@ -12,6 +12,7 @@ import pytest
 
 from collider.cache import WrapCache
 from collider.Package import WrapPackage
+from collider.utils import network
 
 
 class _DummyResponse:
@@ -112,10 +113,60 @@ def test_wrap_cache_ensure_archive_rejects_non_http_scheme(tmp_path: Path, monke
     def _fail_urlopen(*_args, **_kwargs):
         raise AssertionError('urlopen must not be reached for a non-http(s) scheme.')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fail_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fail_urlopen)
 
     with pytest.raises(ValueError, match='Unsupported archive URL scheme'):
         cache.prepare_packagecache(package, tmp_path / 'subprojects', offline=False)
+
+
+def test_wrap_cache_ensure_archive_rejects_blocked_host(tmp_path: Path, monkeypatch):
+    """An archive host resolving to a blocked address is rejected before any fetch (SSRF guard)."""
+    cache = WrapCache(tmp_path / 'cache')
+    source_hash = hashlib.sha256(b'x').hexdigest()
+    package = WrapPackage.from_wrap_text(
+        'foo',
+        '1.0.0',
+        '[wrap-file]\n'
+        'source_url=https://metadata.internal/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        f'source_hash={source_hash}\n',
+    )
+
+    monkeypatch.setattr(network, '_resolve_host_addresses', lambda _host: ['169.254.169.254'])
+
+    def _fail_fetch(*_args, **_kwargs):
+        raise AssertionError('The network must not be reached for a blocked host.')
+
+    monkeypatch.setattr(network, 'safe_urlopen', _fail_fetch)
+
+    with pytest.raises(ValueError, match='blocked'):
+        cache.prepare_packagecache(package, tmp_path / 'subprojects', offline=False)
+
+
+def test_wrap_cache_ensure_archive_cleans_temp_on_blocked_redirect(tmp_path: Path, monkeypatch):
+    """A redirect blocked mid-download surfaces the security error and leaves no temp file."""
+    cache = WrapCache(tmp_path / 'cache')
+    source_hash = hashlib.sha256(b'x').hexdigest()
+    package = WrapPackage.from_wrap_text(
+        'foo',
+        '1.0.0',
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        f'source_hash={source_hash}\n',
+    )
+
+    def _redirect_blocked(*_args, **_kwargs):
+        raise ValueError('Refusing redirect to blocked host in "https://169.254.169.254/x".')
+
+    monkeypatch.setattr(network, 'safe_urlopen', _redirect_blocked)
+    before = set(Path(tempfile.gettempdir()).glob('tmp*'))
+
+    with pytest.raises(ValueError, match='Refusing redirect'):
+        cache.prepare_packagecache(package, tmp_path / 'subprojects', offline=False)
+
+    leaked = set(Path(tempfile.gettempdir()).glob('tmp*')) - before
+    assert leaked == set()
 
 
 def test_wrap_cache_has_package(tmp_path: Path):
@@ -156,7 +207,7 @@ def test_wrap_cache_prepare_packagecache_downloads(tmp_path: Path, monkeypatch):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(content)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     cache.prepare_packagecache(package, subprojects, offline=False)
 
@@ -177,7 +228,7 @@ def test_wrap_cache_prepare_packagecache_handles_cross_device(tmp_path: Path, mo
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(content)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     moved = {'value': False}
     original_move = shutil.move
@@ -223,7 +274,7 @@ def test_wrap_cache_download_hash_mismatch(tmp_path: Path, monkeypatch):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(content)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     with pytest.raises(ValueError, match='Archive hash mismatch'):
         cache.prepare_packagecache(package, subprojects, offline=False)
@@ -270,7 +321,7 @@ def test_wrap_cache_warns_http_url(tmp_path: Path, monkeypatch, caplog):
     def _fake_urlopen(url, **_kwargs):
         return _DummyResponse(b'payload')
 
-    monkeypatch.setattr(urllib.request, 'urlopen', _fake_urlopen)
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     caplog.set_level('WARNING')
     with pytest.raises(ValueError, match='Archive hash mismatch'):

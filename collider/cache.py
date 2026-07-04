@@ -18,6 +18,7 @@ from typing import Optional
 
 from collider.log import logger
 from collider.Package import WrapPackage
+from collider.utils import network
 from collider.utils.core import assert_safe_path_segment, is_safe_path_segment
 from collider.utils.fs import atomic_write_text
 from collider.utils.meson.scan import ScannedDependency
@@ -272,16 +273,27 @@ class WrapCache:
             # Offline mode must be explicit about missing archives.
             raise FileNotFoundError(f'Archive not found in cache: {safe_name}')
 
+        # The URL comes from untrusted wrap metadata: refuse hosts in blocked ranges and
+        # keep every redirect hop governed so the fetch cannot pivot into internal services.
+        network.assert_fetchable_url(url)
+
         with tempfile.NamedTemporaryFile('wb+', delete=False) as tmp_file:
             tmp_path = Path(tmp_file.name)
             try:
-                with urllib.request.urlopen(url, timeout=DEFAULT_NETWORK_TIMEOUT) as response:
+                with network.safe_urlopen(
+                    url, timeout=DEFAULT_NETWORK_TIMEOUT, check_redirect_hosts=True
+                ) as response:
                     tmp_file.write(response.read())
             except urllib.error.URLError as exc:
                 tmp_path.unlink(missing_ok=True)
                 raise FileNotFoundError(
                     f'Failed to download archive "{safe_name}" from "{url}": {exc}'
                 ) from exc
+            except ValueError:
+                # A redirect into a blocked host or scheme raises ValueError from the SSRF
+                # guard; clean up the temp file and let the security error propagate.
+                tmp_path.unlink(missing_ok=True)
+                raise
 
         file_hash = compute_file_hash(tmp_path)
         if file_hash != expected_hash:

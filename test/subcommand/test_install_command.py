@@ -6,7 +6,6 @@
 import argparse
 import hashlib
 import os
-import urllib.request
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -100,7 +99,9 @@ def test_install_from_lockfile(tmp_path: Path, monkeypatch) -> None:
     repo.search.return_value = {repo_key: RepoPackageEntry('foo', '1.0.0', PackageType.WRAP)}
 
     context = _make_context(tmp_path, repo)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False, frozen=False)
     cmd = Install(args, context)
@@ -171,7 +172,9 @@ def test_install_fallback_to_colliderfile(tmp_path: Path, monkeypatch) -> None:
     all_matches = {'repo1': {repo_key: entry}}
 
     context = _make_context(tmp_path, repo)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False, frozen=False)
     cmd = Install(args, context)
@@ -206,7 +209,9 @@ def test_install_honors_declared_version_constraint(tmp_path: Path, monkeypatch)
     all_matches = {'repo1': {repo_key: entry}}
 
     context = _make_context(tmp_path, repo)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False, frozen=False)
     cmd = Install(args, context)
@@ -343,7 +348,9 @@ def test_install_warns_when_locked_version_violates_declared_constraint(
     repo.requires_network.return_value = False
     repo.origin_url = ORIGIN
     context = _make_context(tmp_path, repo)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False, frozen=False)
     cmd = Install(args, context)
@@ -583,7 +590,9 @@ def test_install_fetches_from_origin_repo(tmp_path: Path, monkeypatch) -> None:
     repo.requires_network.return_value = False
     repo.origin_url = ORIGIN
     context = _make_context(tmp_path, repo, repo_name='repo1')
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False, frozen=False)
     cmd = Install(args, context)
@@ -675,7 +684,9 @@ def test_install_cross_root_conflict_detected(
     config.offline = False
     context = Context(config=config, cache=WrapCache(tmp_path / 'cache'), offline=False)
 
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     def mock_get_deps(self_prov, candidate):
         if candidate.name == 'libfoo':
@@ -777,7 +788,9 @@ def test_install_origin_url_normalization(tmp_path: Path, monkeypatch) -> None:
     repo.requires_network.return_value = False
     repo.origin_url = 'https://wrapdb.example.com/v2'
     context = _make_context(tmp_path, repo)
-    monkeypatch.setattr(urllib.request, 'urlopen', lambda url, **_kwargs: _DummyResponse(content))
+    monkeypatch.setattr(
+        'collider.utils.network.safe_urlopen', lambda url, **_kwargs: _DummyResponse(content)
+    )
 
     args = argparse.Namespace(offline=False, frozen=False)
     cmd = Install(args, context)
