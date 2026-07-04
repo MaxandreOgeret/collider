@@ -273,6 +273,29 @@ class WrapCache:
             # Offline mode must be explicit about missing archives.
             raise FileNotFoundError(f'Archive not found in cache: {safe_name}')
 
+        tmp_path = self._download_archive(url, safe_name)
+
+        file_hash = compute_file_hash(tmp_path)
+        if file_hash != expected_hash:
+            tmp_path.unlink(missing_ok=True)
+            raise ValueError(
+                f'Archive hash mismatch for "{safe_name}": '
+                f'expected {expected_hash}, got {file_hash}.'
+            )
+
+        cached_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            tmp_path.replace(cached_path)
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise
+            # /tmp and cache may live on different filesystems, so fall back to a move.
+            shutil.move(tmp_path, cached_path)
+        return cached_path
+
+    @staticmethod
+    def _download_archive(url: str, safe_name: str) -> Path:
+        """Download an archive to a temp file while enforcing the SSRF guard on every hop."""
         # The URL comes from untrusted wrap metadata: refuse hosts in blocked ranges and
         # keep every redirect hop governed so the fetch cannot pivot into internal services.
         network.assert_fetchable_url(url)
@@ -294,21 +317,4 @@ class WrapCache:
                 # guard; clean up the temp file and let the security error propagate.
                 tmp_path.unlink(missing_ok=True)
                 raise
-
-        file_hash = compute_file_hash(tmp_path)
-        if file_hash != expected_hash:
-            tmp_path.unlink(missing_ok=True)
-            raise ValueError(
-                f'Archive hash mismatch for "{safe_name}": '
-                f'expected {expected_hash}, got {file_hash}.'
-            )
-
-        cached_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            tmp_path.replace(cached_path)
-        except OSError as exc:
-            if exc.errno != errno.EXDEV:
-                raise
-            # /tmp and cache may live on different filesystems, so fall back to a move.
-            shutil.move(tmp_path, cached_path)
-        return cached_path
+        return tmp_path
