@@ -68,7 +68,7 @@ def test_discover_plugins_import_error(caplog) -> None:
         # Mock import_module to raise ImportError
         with patch('importlib.import_module', side_effect=ImportError('Mocked import error')):
             with pytest.raises(ImportError, match='Mocked import error'):
-                plugins = core.discover_plugins(mock_package)
+                core.discover_plugins(mock_package)
 
 
 def test_run_command_success() -> None:

@@ -649,7 +649,7 @@ def test_install_cross_root_conflict_detected(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Install detects incompatible transitive deps across roots and fails."""
-    from collider.utils.packaging.resolver import Candidate, Requirement
+    from collider.utils.packaging.resolver import Requirement
 
     _init_project(
         tmp_path,

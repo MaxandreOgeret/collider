@@ -9,7 +9,6 @@ import argparse
 import os
 import sys
 
-from collider.Context import Context
 from collider.log import logger
 from collider.subcommand.SubcommandInterface import SubcommandInterface
 from collider.utils import core
