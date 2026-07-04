@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   checklist:
-    if: ${{ github.actor != 'nektos/act' }}
+    # Dependabot PRs are machine-generated and never fill the template, so the checklist
+    # does not apply to them.
+    if: ${{ github.actor != 'nektos/act' && github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Verify checklist and AI disclosure
