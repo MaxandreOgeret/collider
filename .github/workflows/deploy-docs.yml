@@ -27,7 +27,7 @@ jobs:
       DOCS_DEPLOY_KNOWN_HOSTS: ${{ vars.DOCS_DEPLOY_KNOWN_HOSTS }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Resolve deploy target
         id: target
