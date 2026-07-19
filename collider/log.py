@@ -10,6 +10,8 @@ import sys
 from enum import Enum
 from typing import Callable, Optional, TextIO, cast
 
+from tqdm import tqdm
+
 
 first_include = False
 logger = logging.getLogger('collider')
@@ -74,12 +76,27 @@ class _CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
+class _TqdmHandler(logging.Handler):
+    """
+    Route log lines through tqdm so active progress bars are not corrupted.
+    tqdm.write clears live bars, prints the line, and redraws the bars; with no
+    active bar it degrades to a plain stderr write.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Write the formatted record via tqdm to preserve live bars."""
+        try:
+            tqdm.write(self.format(record), file=sys.stderr)
+        except Exception:  # pylint: disable=broad-exception-caught
+            self.handleError(record)
+
+
 def init_logger(level: Level) -> None:
     """Reset handlers to avoid duplicate logs across repeated initializations."""
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
-    handler = logging.StreamHandler()
+    handler = _TqdmHandler()
     handler.setFormatter(_CustomFormatter(debug=level is Level.DEBUG))
     logger.addHandler(handler)
     logger.setLevel(level.value)
