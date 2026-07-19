@@ -234,7 +234,15 @@ class Wrap(RepositoryInterface):
         except UnicodeDecodeError as e:
             raise ValueError(f'Failed to decode wrap file for "{repo_key}".') from e
 
-        return WrapPackage.from_wrap_text(entry.name, entry.version, wrap_text)
+        try:
+            return WrapPackage.from_wrap_text(entry.name, entry.version, wrap_text)
+        except ValueError as e:
+            # A rejected wrap is a repository data problem, so surface a clean user
+            # error instead of crashing through the generic bug-report handler.
+            raise ColliderUserError(
+                f'Refusing wrap for "{repo_key}" from "{self.url.geturl()}": {e}',
+                os.EX_DATAERR,
+            ) from e
 
     def requires_network(self) -> bool:
         """Whether this repository needs network access for search and fetch."""

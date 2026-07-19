@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from collider.errors import ColliderUserError
 from collider.Package import WrapPackage
 from collider.repository.implementation.Filesystem import Filesystem
 from collider.utils.packaging.PackageType import PackageType
@@ -48,6 +49,23 @@ def test_filesystem_repo_rejects_http_publish_url(repo_path: Path):
 def test_filesystem_repo_rejects_publish_url_credentials(repo_path: Path):
     with pytest.raises(ValueError, match='must not contain credentials'):
         Filesystem(repo_path, publish_url='https://user:pw@packages.example.com/collider/')
+
+
+def test_filesystem_get_package_rejects_malicious_wrap(repo_path: Path):
+    wrap_dir = repo_path / 'foo_1.0.0'
+    wrap_dir.mkdir()
+    (wrap_dir / 'foo.wrap').write_text(
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=../../../../tmp/evil\n'
+        'source_hash=deadbeef\n',
+        encoding='utf-8',
+    )
+    repo = Filesystem.from_url(repo_path.as_uri(), publish_url=repo_path.as_uri())
+    repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
+
+    with pytest.raises(ColliderUserError, match='safe path segment'):
+        repo.get_package(repo_key)
 
 
 def test_filesystem_from_url_scans_existing_wraps(repo_path: Path):

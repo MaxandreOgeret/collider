@@ -5,12 +5,14 @@
 
 import io
 import json
+import os
 import shutil
 import urllib.parse
 
 from pathlib import Path
 from typing import Optional
 
+from collider.errors import ColliderUserError
 from collider.log import logger
 from collider.Package import WrapPackage, _load_wrap_section, get_provide_names
 from collider.repository.entries import RepoPackageEntry, add_wrap_entry
@@ -130,11 +132,19 @@ class Filesystem(RepositoryInterface):
         wrap_path = self._wrap_path(repo_pkg_entry.name, repo_pkg_entry.version)
         logger.debug(f'Loading wrap file from "{wrap_path.as_posix()}".')
         wrap_text = wrap_path.read_text(encoding='utf-8')
-        return WrapPackage.from_wrap_text(
-            repo_pkg_entry.name,
-            repo_pkg_entry.version,
-            wrap_text,
-        )
+        try:
+            return WrapPackage.from_wrap_text(
+                repo_pkg_entry.name,
+                repo_pkg_entry.version,
+                wrap_text,
+            )
+        except ValueError as e:
+            # A rejected wrap is a repository data problem, so surface a clean user
+            # error instead of crashing through the generic bug-report handler.
+            raise ColliderUserError(
+                f'Refusing wrap for "{repo_key}" from "{self.path.as_posix()}": {e}',
+                os.EX_DATAERR,
+            ) from e
 
     def _stage_archives_and_rewrite_wrap(
         self,

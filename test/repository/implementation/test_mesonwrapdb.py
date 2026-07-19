@@ -251,6 +251,28 @@ def test_wrap_get_package_parses_wrap(monkeypatch):
     assert pkg.source_hash == 'deadbeef'
 
 
+def test_wrap_get_package_rejects_malicious_wrap(monkeypatch):
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=../../../../tmp/evil\n'
+        'source_hash=deadbeef\n'
+    )
+
+    def _fake_urlopen(url, **_kwargs):
+        return _DummyResponse(wrap_text)
+
+    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
+
+    url = urllib.parse.urlparse('https://wrapdb.mesonbuild.com/v2/')
+    repo_key = make_repo_key('foo', '1.0.0', PackageType.WRAP)
+    packages = {repo_key: RepoPackageEntry('foo', '1.0.0', PackageType.WRAP)}
+    repo = Wrap(url, packages)
+
+    with pytest.raises(ColliderUserError, match='safe path segment'):
+        repo.get_package(repo_key)
+
+
 def test_wrap_from_url_offline_uses_cache(tmp_path):
     cache_path = tmp_path / 'cache'
     cache_file = _cache_file_for(cache_path, 'https://wrapdb.mesonbuild.com/v2/')
