@@ -167,7 +167,7 @@ def test_wrap_package_rejects_incomplete_patch_metadata():
         WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
 
 
-def test_wrap_package_warns_http_urls(caplog):
+def test_wrap_package_rejects_http_source_url():
     wrap_text = (
         '[wrap-file]\n'
         'source_url=http://example.com/foo.tar.xz\n'
@@ -175,10 +175,23 @@ def test_wrap_package_warns_http_urls(caplog):
         'source_hash=deadbeef\n'
     )
 
-    caplog.set_level('WARNING')
-    pkg = WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
-    assert pkg.source_url == 'http://example.com/foo.tar.xz'
-    assert 'HTTP source URLs are allowed but insecure' in caplog.text
+    with pytest.raises(ValueError, match='insecure HTTP source_url'):
+        WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
+
+
+def test_wrap_package_rejects_http_patch_url():
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+        'patch_url=http://example.com/foo.patch.tar.xz\n'
+        'patch_filename=foo.patch.tar.xz\n'
+        'patch_hash=cafe\n'
+    )
+
+    with pytest.raises(ValueError, match='insecure HTTP patch_url'):
+        WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
 
 
 def test_get_provide_names_returns_named_provide_keys():

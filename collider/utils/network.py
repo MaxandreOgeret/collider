@@ -64,6 +64,25 @@ def _host_is_blocked(host: str) -> bool:
     return any(_is_blocked_address(address) for address in addresses)
 
 
+def is_loopback_host(host: str) -> bool:
+    """
+    Whether a hostname or IP literal refers to the loopback interface.
+    Accepts bracketed IPv6 literals ("[::1]") as written in URLs and CLI input.
+    Fail-closed: any unrecognized form returns False.
+    :param host: Hostname or IP literal.
+    :return: True for "localhost" or any loopback IP.
+    """
+    normalized = host.strip().lower()
+    if normalized.startswith('[') and normalized.endswith(']'):
+        normalized = normalized[1:-1]
+    if normalized == 'localhost':
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
 def assert_fetchable_url(url: str) -> None:
     """
     Reject a URL that untrusted input must never make us fetch (SSRF guard).

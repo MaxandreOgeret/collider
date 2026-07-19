@@ -10,7 +10,6 @@ import base64
 import binascii
 import hmac
 import http.server
-import ipaddress
 import json
 import os
 import re
@@ -33,6 +32,7 @@ from collider.Package import WrapPackage
 from collider.repository.implementation.Filesystem import Filesystem
 from collider.repository.implementation.RepositoryInterface import PackageAlreadyExistsError
 from collider.subcommand.SubcommandInterface import SubcommandInterface
+from collider.utils import network
 from collider.utils.compat import override
 from collider.utils.fs import atomic_write_text
 from collider.utils.packaging.PackageType import PackageType
@@ -98,15 +98,7 @@ def is_collider_delete_path(path: str) -> Optional[tuple[str, str]]:
 
 def is_loopback_host(host: str) -> bool:
     """Return True when host binds to localhost only."""
-    normalized = host.strip().lower()
-    if normalized.startswith('[') and normalized.endswith(']'):
-        normalized = normalized[1:-1]
-    if normalized == 'localhost':
-        return True
-    try:
-        return ipaddress.ip_address(normalized).is_loopback
-    except ValueError:
-        return False
+    return network.is_loopback_host(host)
 
 
 @dataclass(frozen=True)

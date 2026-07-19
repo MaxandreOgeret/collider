@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from collider.log import logger
 from collider.utils.core import assert_safe_path_segment
 from collider.utils.fs import atomic_write_text
 
@@ -114,7 +113,7 @@ class WrapPackage:  # pylint: disable=too-many-instance-attributes
             raise ValueError('Wrap file missing required source fields.')
 
         if urllib.parse.urlparse(source_url).scheme == 'http':
-            logger.warning('HTTP source URLs are allowed but insecure; prefer HTTPS.')
+            raise ValueError('Refusing insecure HTTP source_url in wrap; use HTTPS.')
 
         patch_url = section.get('patch_url')
         patch_filename = section.get('patch_filename')
@@ -125,7 +124,7 @@ class WrapPackage:  # pylint: disable=too-many-instance-attributes
             if not (patch_url and patch_filename and patch_hash):
                 raise ValueError('Wrap file patch metadata is incomplete.')
             if urllib.parse.urlparse(patch_url).scheme == 'http':
-                logger.warning('HTTP patch URLs are allowed but insecure; prefer HTTPS.')
+                raise ValueError('Refusing insecure HTTP patch_url in wrap; use HTTPS.')
 
         return cls(
             name=name,

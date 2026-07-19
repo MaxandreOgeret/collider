@@ -97,13 +97,15 @@ Extends the WrapDB read API with two write endpoints under a `_collider` namespa
 
 - `source_url`, `source_filename`, `source_hash` are required.
 - Patch fields are optional, but if any patch field is present, all must be present.
-- HTTP URLs are allowed with a warning. HTTPS or local file paths are preferred.
+- HTTP URLs are rejected. HTTPS or local file paths are required.
+- Filenames must be bare basenames; path segments or separators are rejected.
 
 **Rationale**
 
 - A complete source tuple is required for reproducible builds.
 - Mixed patch metadata creates ambiguous cache behavior.
-- Warning on HTTP helps avoid accidental downgrade to insecure transports.
+- The hash chain is rooted in the wrap file, so a cleartext wrap fetch would void every downstream integrity check.
+- Filenames become cache and packagecache path segments, so anything but a basename would allow path traversal into arbitrary files.
 
 ## CLI Workflows
 
@@ -500,9 +502,10 @@ When `--offline` is set and a repository requires network access, the resolver c
 
 ## Security and Integrity
 
-- HTTP URLs are allowed but warned to avoid silent downgrade risks.
+- HTTP is refused for repository index, wrap, and archive fetches; only loopback repository URLs may use plain HTTP (for `collider serve` in development).
+- Repository URLs must not embed credentials (userinfo), which would otherwise be persisted into `collider.lock` and logs.
 - Archives are validated against hashes before caching or publishing.
-- Path traversal is prevented by using basename-only filenames.
+- Path traversal is prevented by rejecting wrap `source_filename`/`patch_filename` values that are not bare basenames when the wrap is parsed.
 - The lockfile's `wrap_hash` detects tampered or republished wrap files. Without the lockfile, an attacker controlling the repository could replace a wrap file (with matching archive hashes for malicious archives) undetected. The lockfile closes this gap by recording the expected wrap content hash at lock time.
 
 ## Error Handling

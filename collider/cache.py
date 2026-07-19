@@ -243,7 +243,9 @@ class WrapCache:
 
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme == 'http':
-            logger.warning('HTTP archive URLs are allowed but insecure; prefer HTTPS.')
+            # The expected hash comes from the same channel as the URL, so a cleartext
+            # fetch voids the integrity check.
+            raise ValueError(f'Refusing insecure HTTP archive URL "{url}"; use HTTPS.')
         if parsed.scheme in ('', 'file'):
             # Local archives are allowed in offline mode because they avoid network access entirely.
             if parsed.scheme == 'file':

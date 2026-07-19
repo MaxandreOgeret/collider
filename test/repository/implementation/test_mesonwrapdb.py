@@ -87,7 +87,12 @@ def test_wrap_from_url_warns_missing_v2(monkeypatch, caplog):
     assert repo.url.geturl() == 'https://wrapdb.mesonbuild.com/v2/'
 
 
-def test_wrap_from_url_warns_http(monkeypatch, caplog):
+def test_wrap_from_url_rejects_non_loopback_http():
+    with pytest.raises(ValueError, match='insecure HTTP repository URL'):
+        Wrap.from_url('http://wrapdb.mesonbuild.com/v2/')
+
+
+def test_wrap_from_url_allows_loopback_http(monkeypatch, caplog):
     releases = {'foo': {'versions': ['1.0.0']}}
     payload = json.dumps(releases)
 
@@ -97,10 +102,10 @@ def test_wrap_from_url_warns_http(monkeypatch, caplog):
     monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
 
     caplog.set_level('WARNING')
-    repo = Wrap.from_url('http://wrapdb.mesonbuild.com/v2/')
+    repo = Wrap.from_url('http://127.0.0.1:8000/v2/')
 
     assert isinstance(repo, Wrap)
-    assert 'HTTP WrapDB URLs are allowed but insecure' in caplog.text
+    assert 'HTTP WrapDB URLs are insecure' in caplog.text
 
 
 def test_wrap_from_url_rejects_url_credentials():

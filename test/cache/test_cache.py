@@ -304,7 +304,7 @@ def test_wrap_cache_offline_allows_file_url(tmp_path: Path):
     assert cached_file.exists()
 
 
-def test_wrap_cache_warns_http_url(tmp_path: Path, monkeypatch, caplog):
+def test_wrap_cache_rejects_http_archive_url(tmp_path: Path):
     cache = WrapCache(tmp_path / 'cache')
     subprojects = tmp_path / 'project' / 'subprojects'
     subprojects.mkdir(parents=True)
@@ -318,15 +318,8 @@ def test_wrap_cache_warns_http_url(tmp_path: Path, monkeypatch, caplog):
         source_hash='deadbeef',
     )
 
-    def _fake_urlopen(url, **_kwargs):
-        return _DummyResponse(b'payload')
-
-    monkeypatch.setattr('collider.utils.network.safe_urlopen', _fake_urlopen)
-
-    caplog.set_level('WARNING')
-    with pytest.raises(ValueError, match='Archive hash mismatch'):
+    with pytest.raises(ValueError, match='insecure HTTP archive URL'):
         cache.prepare_packagecache(package, subprojects, offline=False)
-    assert 'HTTP archive URLs are allowed but insecure' in caplog.text
 
 
 # -- Scan cache ---------------------------------------------------------------

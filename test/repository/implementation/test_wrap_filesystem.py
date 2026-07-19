@@ -40,11 +40,9 @@ def test_filesystem_repo_requires_publish_url(repo_path: Path):
         Filesystem.from_url(repo_path.as_uri())
 
 
-def test_filesystem_repo_warns_http_publish_url(repo_path: Path, caplog):
-    caplog.set_level('WARNING')
-    repo = Filesystem(repo_path, publish_url='http://packages.example.com/collider/')
-    assert isinstance(repo, Filesystem)
-    assert 'Publish URL uses HTTP; downloads will be insecure.' in caplog.text
+def test_filesystem_repo_rejects_http_publish_url(repo_path: Path):
+    with pytest.raises(ValueError, match='Publish URL must use HTTPS or file'):
+        Filesystem(repo_path, publish_url='http://packages.example.com/collider/')
 
 
 def test_filesystem_repo_rejects_publish_url_credentials(repo_path: Path):

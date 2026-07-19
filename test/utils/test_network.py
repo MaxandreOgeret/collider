@@ -16,6 +16,7 @@ from collider.utils import network
 from collider.utils.network import (
     _AuthStrippingRedirectHandler,
     assert_fetchable_url,
+    is_loopback_host,
     may_send_push_token,
     safe_urlopen,
 )
@@ -229,3 +230,19 @@ def test_may_send_push_token_allows_http_with_insecure(caplog):
         assert may_send_push_token(url, insecure=True) is True
 
     assert 'insecure' in caplog.text.lower()
+
+
+@pytest.mark.parametrize(
+    'host',
+    ['localhost', 'LOCALHOST', ' localhost ', '127.0.0.1', '::1', '[::1]', '::ffff:127.0.0.1'],
+)
+def test_is_loopback_host_true(host: str):
+    assert is_loopback_host(host)
+
+
+@pytest.mark.parametrize(
+    'host',
+    ['example.com', '192.168.1.1', 'localhost.', '', '127.1', '0x7f000001'],
+)
+def test_is_loopback_host_false(host: str):
+    assert not is_loopback_host(host)

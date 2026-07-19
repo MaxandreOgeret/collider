@@ -95,8 +95,8 @@ Application-wide configuration. Located at `~/.config/collider/config.json`
 |---------------|--------|--------------|------------------------------------------------------|
 | `name`        | string | Yes          | Unique name for CLI references.                      |
 | `type`        | string | Yes          | `"filesystem"`, `"wrap"`, or `"collider"`.           |
-| `url`         | string | Yes          | Repository URL.                                      |
-| `publish_url` | string | Conditional  | Base URL for archive rewrites. Required for `filesystem`, ignored for others. |
+| `url`         | string | Yes          | Repository URL. Must use `https`, or `http` on loopback only. Credentials in the URL are rejected. |
+| `publish_url` | string | Conditional  | Base URL for archive rewrites. Required for `filesystem`, ignored for others. Must use `https` or `file`; credentials are rejected. |
 
 ### Repository Types
 

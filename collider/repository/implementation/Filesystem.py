@@ -52,12 +52,10 @@ class Filesystem(RepositoryInterface):
             raise ValueError(
                 'Publish URL must not contain credentials; remove the userinfo from the URL.'
             )
-        if not parsed_publish.scheme:
-            raise ValueError('Publish URL must include a scheme (https or file).')
-        if parsed_publish.scheme not in ('https', 'http', 'file'):
-            raise ValueError('Publish URL must use HTTPS, HTTP, or file.')
-        if parsed_publish.scheme == 'http':
-            logger.warning('Publish URL uses HTTP; downloads will be insecure.')
+        # Cleartext archive downloads are refused client-side, so an HTTP publish URL
+        # would only produce uninstallable packages.
+        if parsed_publish.scheme not in ('https', 'file'):
+            raise ValueError('Publish URL must use HTTPS or file.')
 
     @classmethod
     def _from_url_impl(

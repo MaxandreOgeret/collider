@@ -129,7 +129,15 @@ class Wrap(RepositoryInterface):
         if url.scheme not in ('https', 'http'):
             raise ValueError(f'Unsupported URL scheme: {url.scheme}')
         if url.scheme == 'http':
-            logger.warning('HTTP WrapDB URLs are allowed but insecure; prefer HTTPS.')
+            # The hash chain is rooted in the wrap file, so a cleartext fetch of the index
+            # or wraps voids every downstream integrity check. Only loopback (e.g.
+            # `collider serve` in development) may use plain HTTP.
+            if not network.is_loopback_host(url.hostname or ''):
+                raise ValueError(
+                    f'Refusing insecure HTTP repository URL "{url.geturl()}"; '
+                    'use HTTPS (HTTP is allowed on loopback only).'
+                )
+            logger.warning('HTTP WrapDB URLs are insecure; allowed on loopback only.')
 
         effective_url = _ensure_v2_url(url)
         releases_url = urllib.parse.urljoin(effective_url.geturl(), _RELEASES_FILENAME)

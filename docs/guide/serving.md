@@ -77,11 +77,13 @@ Both require `Authorization: Bearer <token>`.
 ### `--publish-url` and pushed wraps
 
 When publishing via `collider publish`, the server rewrites archive URLs inside
-the generated wrap files using `--publish-url` as the base. If `--publish-url`
-is not set and push is enabled, Collider logs a warning and wraps will reference
-`file://` archive URLs instead. This works for local testing but is almost
-certainly wrong for any server that clients reach over the network -- always
-pass `--publish-url` in that case.
+the generated wrap files using `--publish-url` as the base. The publish URL must
+use `https` or `file`; cleartext HTTP is rejected because clients refuse insecure
+archive downloads. If `--publish-url` is not set and push is enabled, Collider
+logs a warning and wraps will reference `file://` archive URLs instead. This
+works for local testing but is almost certainly wrong for any server that
+clients reach over the network -- always pass an `https` `--publish-url` in
+that case.
 
 ## Example Workflow
 
@@ -89,7 +91,7 @@ Start a local server and publish to it:
 
 ```bash
 # Terminal 1: start the server
-collider serve /srv/repo --publish-url http://localhost:8000/ --push-token dev
+collider serve /srv/repo --push-token dev
 
 # Terminal 2: configure and publish
 collider repo add dev collider http://localhost:8000/v2/
