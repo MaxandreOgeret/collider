@@ -53,6 +53,13 @@ class RepositoryInterface(ABC):
         if not parsed_url.scheme:
             raise ValueError(f'Invalid URL: {url_str}')
 
+        if parsed_url.username is not None or parsed_url.password is not None:
+            # Credentials in URLs are never sent as auth and would be persisted into
+            # collider.lock and logs, so refuse them at the boundary.
+            raise ValueError(
+                'Repository URL must not contain credentials; remove the userinfo from the URL.'
+            )
+
         instance = cls._from_url_impl(parsed_url, **kwargs)
         instance._origin_url = url_str  # pylint: disable=protected-access
         return instance

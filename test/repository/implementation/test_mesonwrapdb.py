@@ -103,6 +103,11 @@ def test_wrap_from_url_warns_http(monkeypatch, caplog):
     assert 'HTTP WrapDB URLs are allowed but insecure' in caplog.text
 
 
+def test_wrap_from_url_rejects_url_credentials():
+    with pytest.raises(ValueError, match='must not contain credentials'):
+        Wrap.from_url('https://user:secret@wrapdb.mesonbuild.com/v2/')
+
+
 def test_wrap_releases_to_packages_multiple_versions():
     releases = {
         'foo': {'versions': ['1.0.0', '2.0.0']},

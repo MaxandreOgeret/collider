@@ -46,6 +46,12 @@ class Filesystem(RepositoryInterface):
         self.path = path
         self.publish_url = publish_url
         parsed_publish = urllib.parse.urlparse(self.publish_url)
+        if parsed_publish.username is not None or parsed_publish.password is not None:
+            # The publish URL is embedded into wrap source URLs, so credentials here
+            # would leak into every stored wrap.
+            raise ValueError(
+                'Publish URL must not contain credentials; remove the userinfo from the URL.'
+            )
         if not parsed_publish.scheme:
             raise ValueError('Publish URL must include a scheme (https or file).')
         if parsed_publish.scheme not in ('https', 'http', 'file'):

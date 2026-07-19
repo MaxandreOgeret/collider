@@ -47,6 +47,11 @@ def test_filesystem_repo_warns_http_publish_url(repo_path: Path, caplog):
     assert 'Publish URL uses HTTP; downloads will be insecure.' in caplog.text
 
 
+def test_filesystem_repo_rejects_publish_url_credentials(repo_path: Path):
+    with pytest.raises(ValueError, match='must not contain credentials'):
+        Filesystem(repo_path, publish_url='https://user:pw@packages.example.com/collider/')
+
+
 def test_filesystem_from_url_scans_existing_wraps(repo_path: Path):
     wrap_dir = repo_path / 'foo_1.0.0'
     wrap_dir.mkdir()
