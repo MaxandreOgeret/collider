@@ -76,6 +76,84 @@ def test_wrap_package_install_is_idempotent_with_existing_wrap(tmp_path: Path):
     assert wrap_path.read_text(encoding='utf-8') == wrap_text
 
 
+def test_wrap_package_constructor_rejects_traversal_source_filename():
+    with pytest.raises(ValueError, match='source_filename must be a safe path segment'):
+        WrapPackage(
+            name='foo',
+            version='1.0.0',
+            wrap_text='[wrap-file]\n',
+            source_url='https://example.com/foo.tar.xz',
+            source_filename='../evil',
+            source_hash='deadbeef',
+        )
+
+
+def test_wrap_package_constructor_rejects_traversal_patch_filename():
+    with pytest.raises(ValueError, match='patch_filename must be a safe path segment'):
+        WrapPackage(
+            name='foo',
+            version='1.0.0',
+            wrap_text='[wrap-file]\n',
+            source_url='https://example.com/foo.tar.xz',
+            source_filename='foo.tar.xz',
+            source_hash='deadbeef',
+            patch_url='https://example.com/foo.patch.tar.xz',
+            patch_filename='../evil',
+            patch_hash='cafe',
+        )
+
+
+def test_wrap_package_rejects_traversal_source_filename():
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=../../../../tmp/evil\n'
+        'source_hash=deadbeef\n'
+    )
+
+    with pytest.raises(ValueError, match='source_filename must be a safe path segment'):
+        WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
+
+
+def test_wrap_package_rejects_absolute_source_filename():
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=/tmp/evil\n'
+        'source_hash=deadbeef\n'
+    )
+
+    with pytest.raises(ValueError, match='source_filename must be a safe path segment'):
+        WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
+
+
+def test_wrap_package_rejects_backslash_source_filename():
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=..\\evil\n'
+        'source_hash=deadbeef\n'
+    )
+
+    with pytest.raises(ValueError, match='source_filename must be a safe path segment'):
+        WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
+
+
+def test_wrap_package_rejects_traversal_patch_filename():
+    wrap_text = (
+        '[wrap-file]\n'
+        'source_url=https://example.com/foo.tar.xz\n'
+        'source_filename=foo.tar.xz\n'
+        'source_hash=deadbeef\n'
+        'patch_url=https://example.com/foo.patch.tar.xz\n'
+        'patch_filename=../evil\n'
+        'patch_hash=cafe\n'
+    )
+
+    with pytest.raises(ValueError, match='patch_filename must be a safe path segment'):
+        WrapPackage.from_wrap_text('foo', '1.0.0', wrap_text)
+
+
 def test_wrap_package_rejects_incomplete_patch_metadata():
     wrap_text = (
         '[wrap-file]\n'

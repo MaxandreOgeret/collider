@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from collider.log import logger
+from collider.utils.core import assert_safe_path_segment
 from collider.utils.fs import atomic_write_text
 
 
@@ -91,6 +92,14 @@ class WrapPackage:  # pylint: disable=too-many-instance-attributes
     patch_url: Optional[str] = None
     patch_filename: Optional[str] = None
     patch_hash: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Reject filenames that are not bare basenames on every construction path."""
+        # Filenames become cache and packagecache path segments, so anything but a
+        # basename would allow untrusted metadata to escape the target directory.
+        assert_safe_path_segment(self.source_filename, 'source_filename')
+        if self.patch_filename is not None:
+            assert_safe_path_segment(self.patch_filename, 'patch_filename')
 
     @classmethod
     def from_wrap_text(cls, name: str, version: str, wrap_text: str) -> 'WrapPackage':
