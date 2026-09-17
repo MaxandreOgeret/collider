@@ -12,4 +12,4 @@ jobs:
       pull-requests: read
     steps:
       - name: Conventional Commitlint
-        uses: opensource-nepal/commitlint@v1
+        uses: opensource-nepal/commitlint@v2
